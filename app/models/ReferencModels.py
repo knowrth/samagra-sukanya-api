@@ -105,36 +105,60 @@ def insert_income_levels():
     db.session.commit()
 
 
-def create_initial_admin():
+def create_initial_admin(email, phone):
     admin_user = UserModel.query.filter_by(role='ADMIN').first()
     if not admin_user:
-        admin = UserModel(username='admin', email='d4066445@gmail.com', role='ADMIN')
-        admin.password = 'admin1234'
-        admin.user_status = 'ACTIVE'
-        admin.name = 'ADMIN'
-        admin.phone = '1234567890'
-        db.session.add(admin)
-        db.session.commit()
+        try:
+            if email is None:
+                email = 'd40664452@gmail.com'
+            if phone is None:
+                phone = '1234567890'
+            admin = UserModel(username='admin', email=email, role='ADMIN')
+            admin.password = 'admin1234'
+            admin.user_status = 'ACTIVE'
+            admin.name = 'ADMIN'
+            admin.phone = phone
+            db.session.add(admin)
+            db.session.commit()
+
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error creating initial user: {str(e)}")
+            return None
 
 
-def create_initial_user():
-    admin_user = UserModel.query.filter_by(role='USER').first()
-    if not admin_user:
-        user = UserModel(username='SSC455332', email='d40664452@gmail.com', role='USER')
+def create_initial_user(email, phone, name):
+    try:
+        if email is None:
+            email = 'd40664452@gmail.com'
+        if phone is None:
+            phone = '9876543210'
+        if name is None:
+            name = 'DEFAULT'
+
+        user = UserModel(username='SSC455332', email=email, role='USER')
         user.password = 'user1234'
         user.user_status = 'ACTIVE'
-        user.name = 'DEFAULT'
-        user.phone = '9876543210'
+        user.name = name
+        user.phone = phone
         user.amount_paid = '2000'
         user.paid_status = 'PAID'
+
         db.session.add(user)
         db.session.commit()
 
         user_id = user.user_id
 
-        new_path = UserMap(user_id=user_id )
+        new_path = UserMap(user_id=user_id)
         db.session.add(new_path)
         db.session.commit()
+
+        return user_id  # Return the created user_id
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error creating initial user: {str(e)}")
+        return None
 
         # new_analytics = UserAnalytics(user_id=user_id)
         # db.session.add(new_analytics)

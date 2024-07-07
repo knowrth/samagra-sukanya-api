@@ -8,8 +8,8 @@ from models.ReferencModels import insert_income_levels, create_initial_admin, cr
 def create_tables_and_populate_data():
     with app.app_context():
         db.create_all()
-        create_initial_admin()
-        create_initial_user()
+        # create_initial_admin()
+        # create_initial_user()
         insert_income_levels()
 
 
