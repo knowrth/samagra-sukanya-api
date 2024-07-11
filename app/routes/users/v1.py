@@ -36,7 +36,7 @@ def get_transactions_amount_by_user_id(user_id):
             .filter(UserTransaction.user_id == user_id,
                     UserTransaction.category == 'Withdrawals',
                     UserTransaction.type == 'Debit')
-        print('total',total_withdrawal_amount_query)
+        # print('total',total_withdrawal_amount_query)
 
         total_withdrawal_amount = total_withdrawal_amount_query.scalar() or 0
         
@@ -47,7 +47,7 @@ def get_transactions_amount_by_user_id(user_id):
                         'amount': amount}), 200
 
     except (SQLAlchemyError, InvalidRequestError) as e:
-        print('error', e)
+        # print('error', e)
         return jsonify({'error': 'Internal Server Error'}), 500
 
 

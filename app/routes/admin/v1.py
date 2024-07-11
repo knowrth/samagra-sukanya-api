@@ -758,7 +758,7 @@ def get_user_support():
                     'query_title': support.query_title,
                     'query_desc': support.query_desc,
                     'query_status': support.query_status,
-                    'date_time': support.date_time,  
+                    'date_time': support.date_time.strftime('%Y-%m-%d %H:%M:%S.%f'),  
                 }
                 supports.append(ticket)
             else:
@@ -788,8 +788,8 @@ def resolve_user_support(user_id):
     user_support = SupportTicket.query.filter_by(user_id=user_id, date_time=created_at).first()
 
     if user_support:
-        created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
-        user_support.date_time = created_at,
+        # created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+        # user_support.date_time = created_at,
         user_support.query_status = "Closed",
         user_support.resolved_issue = resolved_issue,
         db.session.commit()
