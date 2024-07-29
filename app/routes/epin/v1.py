@@ -274,6 +274,7 @@ def get_pin_details(user_id):
         issued_to_name = UserModel.query.filter_by(user_id=pin.sponsor_id).first().name if pin.issued_to else None
         held_by_name = UserModel.query.filter_by(user_id=pin.user_id).first().name if pin.held_by else None
         used_by = UserModel.query.filter_by(user_id=latest_transaction.used_by).first().name if latest_transaction.used_by else None
+        registered_to = UserModel.query.filter_by(user_id=latest_transaction.registered_to).first().name if latest_transaction.registered_to else None
         package = 'Registration Package' if pin.pin_amount == 500 else 'User Package'
         sent_pin_details.append({
             'pin_id': pin.pin,
@@ -282,6 +283,7 @@ def get_pin_details(user_id):
             'transferred_from': issued_to_name,
             'transferred_to': held_by_name,
             'used_by': used_by,
+            'registered_to': registered_to,
             'created_at': created_at_time.strftime("%Y-%m-%d %H:%M:%S"),
             'transfer_at': latest_transaction.created_at.strftime("%Y-%m-%d %H:%M:%S") if latest_transaction else None
         })
@@ -293,6 +295,7 @@ def get_pin_details(user_id):
         issued_to_name = UserModel.query.filter_by(user_id=pin.sponsor_id).first().name if pin.issued_to else None
         held_by_name = UserModel.query.filter_by(user_id=pin.user_id).first().name if pin.held_by else None
         used_by = UserModel.query.filter_by(user_id=latest_transaction.used_by).first().name if latest_transaction.used_by else None
+        registered_to = UserModel.query.filter_by(user_id=latest_transaction.registered_to).first().name if latest_transaction.registered_to else None
         package = 'Registration Package' if pin.pin_amount == 500 else 'User Package'
         received_pin_details.append({
             'pin_id': pin.pin,
@@ -301,6 +304,7 @@ def get_pin_details(user_id):
             'transferred_from': issued_to_name,
             'transferred_to': held_by_name,
             'used_by': used_by,
+            'registered_to': registered_to,
             'created_at': created_at_time.strftime("%Y-%m-%d %H:%M:%S"),
             'transfer_at': latest_transaction.created_at.strftime("%Y-%m-%d %H:%M:%S") if latest_transaction else None
         })
@@ -390,6 +394,7 @@ def register_user_for_epin():
                 issued_to=epinUser.issued_to,
                 held_by=epinUser.held_by,
                 used_by=epinUser.held_by,
+                registered_to=new_user_id,
             )
 
             db.session.add(transfer_epin)
@@ -439,21 +444,38 @@ from sqlalchemy import desc, func, and_, select
 @user_required
 def get_transactions_by_user(user_id):
     try:
+        page = request.args.get('page', default=1, type=int)
+        per_page = request.args.get('per_page', default=10, type=int)
+        
+        # Query to get the latest transactions based on epin_id and created_at
         subquery = db.session.query(
             EPinTransaction.epin_id,
             func.max(EPinTransaction.created_at).label('latest_created_at')
         ).group_by(EPinTransaction.epin_id).subquery()
 
+        # Main query to fetch transactions, ordered by transaction_type descending
         transactions = db.session.query(EPinTransaction).\
             join(subquery, and_(
                 EPinTransaction.epin_id == subquery.c.epin_id,
                 EPinTransaction.created_at == subquery.c.latest_created_at
             )).\
             filter(or_(EPinTransaction.issued_to == user_id, EPinTransaction.held_by == user_id)).\
-            order_by(desc(EPinTransaction.transaction_type)).all()
-        
-        serialized_transactions = [transaction.serialize() for transaction in transactions]
-        return jsonify(serialized_transactions), 200
+            order_by(desc(EPinTransaction.transaction_type))
+
+        # Paginate the results
+        paginated_transactions = transactions.paginate(page=page, per_page=per_page)
+
+        # Serialize paginated transactions to JSON
+        serialized_transactions = [transaction.serialize() for transaction in paginated_transactions.items]
+
+        # Return JSON response with paginated data
+        return jsonify({
+            'transactions': serialized_transactions,
+            'page': paginated_transactions.page,
+            'total_pages': paginated_transactions.pages,
+            'total_items': paginated_transactions.total
+        }), 200
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

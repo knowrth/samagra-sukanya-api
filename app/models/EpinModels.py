@@ -49,10 +49,11 @@ class EPinTransaction(db.Model):
     issued_to = db.Column(db.String(36))
     held_by = db.Column(db.String(36))
     used_by = db.Column(db.String(36))
+    registered_to = db.Column(db.String(36))
     trans_date = db.Column(db.DateTime)
     reg_date = db.Column(db.DateTime)
 
-    def __init__(self, transaction_type=None, user_id=None, sponsor_id=None, epin_id=None, created_at=None, pin=None, pin_type=None, pin_amount=None, issued_to=None, held_by=None, used_by=None):
+    def __init__(self, transaction_type=None, user_id=None, sponsor_id=None, epin_id=None, created_at=None, pin=None, pin_type=None, pin_amount=None, issued_to=None, held_by=None, used_by=None, registered_to=None ):
         if epin_id is None:
             if transaction_type == "generate":
                 self.epin_id = str(uuid.uuid4())
@@ -71,6 +72,7 @@ class EPinTransaction(db.Model):
         self.issued_to = issued_to
         self.held_by = held_by
         self.used_by = used_by
+        self.registered_to = registered_to
 
     @staticmethod
     def generate_pin():
@@ -88,6 +90,7 @@ class EPinTransaction(db.Model):
         issued_to_name = None
         held_by_name = None
         used_by_name = None
+        registered_to_name = None
 
         # Fetch issued_to_name
         if self.issued_to:
@@ -103,6 +106,10 @@ class EPinTransaction(db.Model):
         if self.transaction_type == 'registered' and self.used_by:
             user = UserModel.query.filter_by(user_id=self.used_by).first()
             used_by_name = user.name if user else None
+
+        if self.transaction_type == 'registered' and self.registered_to:
+            user = UserModel.query.filter_by(user_id=self.registered_to).first()
+            registered_to_name = user.name if user else None
 
         # if self.transaction_type == "transfer":
         #     # For transfer transactions, issued_to should be the original owner who generated the pin
@@ -124,7 +131,8 @@ class EPinTransaction(db.Model):
             'pin_type' : self.pin_type,
             'issued_to': issued_to_name,  # Assuming user_id is the field representing the user to which it is issued
             'held_by': held_by_name,  # Assuming sponsor_id is the field representing the latest user who has the epin
-            'used_by': used_by_name
+            'used_by': used_by_name,
+            'registered_to': registered_to_name,
         }
 
 

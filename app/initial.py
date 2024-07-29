@@ -1,4 +1,5 @@
 import argparse
+from models.db import app
 from models.ReferencModels import create_initial_admin, create_initial_user
 
 def main():
@@ -11,12 +12,13 @@ def main():
 
     args = parser.parse_args()
 
-    if args.admin_email and args.admin_phone:
-        create_initial_admin(args.admin_email, args.admin_phone)
-    elif args.user_email and args.user_phone:
-        create_initial_user(args.user_email, args.user_phone, args.user_name)
-    else:
-        print("Please provide valid arguments.")
+    with app.app_context():
+        if args.admin_email and args.admin_phone:
+            create_initial_admin(args.admin_email, args.admin_phone)
+        elif args.user_email and args.user_phone and args.user_name:
+            create_initial_user(args.user_email, args.user_phone, args.user_name)
+        else:
+            print("Please provide valid arguments.")
 
 if __name__ == '__main__':
     main()

@@ -9,7 +9,7 @@ from models.EpinModels import EPinTransaction
 from sqlalchemy import MetaData, Table
 
 
-CORS(app, resources={r"/api/*": {"origins": "*", "http://localhost:3000": "*"}})
+CORS(app, origins=['*'])
 
 # def create_tables_and_populate_data():
 #     with app.app_context():

@@ -68,6 +68,5 @@ mail = Mail(app)
 # mysql = MySQL(app)
 # jwt = JWTManager(app)
 
-from models.UserModels import UserModel
-from models.EpinModels import RegisterEPin
-
+# from models.UserModels import UserModel
+# from models.EpinModels import RegisterEPin

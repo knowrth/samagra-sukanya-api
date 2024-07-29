@@ -403,7 +403,6 @@ def admin_issue_epin():
 
 
 # Transaction of user
-
 @admin.route('/pay_amount', methods=['POST'])
 @admin_required
 def pay_amount():
@@ -411,60 +410,73 @@ def pay_amount():
     name = data.get('name')
     phone = data.get('phone')
     amount_str = data.get('amount')
+    count_value = data.get('count')
+    
+    if not all([name, phone, amount_str, count_value]):
+        return jsonify({'error': 'Missing required data (name, phone, amount, count)'}), 400
+    
     if amount_str is not None:
         amount = Decimal(amount_str)
     
-    # print('Data:', data)
+    if count_value is not None:
+        count = int(count_value)
+    
     created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
     user = UserModel.query.filter_by(name=name, phone=phone).first()
-    if user:
-        user_id = user.user_id;
-
-
-        transaction_type = "Payment"
-        remark = f"Paid {amount} "
-        new_transaction = UserTransaction(
-            user_id=user_id,
-            type=transaction_type,
-            category="Kit Purchase",
-            amount=str(amount),
-            remark=remark,
-            sponsor_id=user_id,
-            date_time=created_at,
-            status=None
-        )
-
-        db.session.add(new_transaction)
-        db.session.commit()
-
+    
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+    
+    user_id = user.user_id 
+    
+    try:
+        for i in range(count):
+            transaction_type = "Payment"
+            remark = f"Paid {amount} "
+            # print(i)
+            # print(count)
+            new_transaction = UserTransaction(
+                user_id=user_id,
+                type=transaction_type,
+                category="Kit Purchase",
+                amount=str(amount),
+                remark=remark,
+                sponsor_id=user_id,
+                date_time=created_at,
+                status=None
+            )
+            
+            db.session.add(new_transaction)
         
-        if amount == Decimal('0.00'):
-            epin_transaction = EPinTransaction(
+            if amount == Decimal('0.00'):
+                epin_transaction = EPinTransaction(
                     transaction_type='generate',
                     user_id=user_id,
                     pin_type='0 E-pin',
-                    pin_amount= '0.00',
+                    pin_amount='0.00',
                     created_at=created_at,
                     issued_to=user_id,
                     held_by=user_id,
                 )
-        else:
-            epin_transaction = EPinTransaction(
+            else:
+                epin_transaction = EPinTransaction(
                     transaction_type='generate',
                     user_id=user_id,
                     pin_type='500 E-pin',
-                    pin_amount= '500.00',
+                    pin_amount='500.00',
                     created_at=created_at,
                     issued_to=user_id,
                     held_by=user_id,
                 )
-        db.session.add(epin_transaction)
-        db.session.commit()
-        
-
+            
+            db.session.add(epin_transaction)
+            db.session.commit()
+            
         return jsonify({'message': 'Amount paid successfully'}), 200
-    else:
-        return jsonify({'error': 'User not found'}), 404
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 # transactions table
@@ -514,29 +526,31 @@ def get_all_transactions_with_user_email():
 # names and phone 
 
 @admin.route('/v1/usernames-and-phones', methods=['GET'])
+@admin_required
 def get_usernames_and_phones():
     try:
-        users = UserModel.query.all()
+        page = request.args.get('page', 1, type=int)
+        per_page = 10
+
+        users = UserModel.query.paginate(page=page, per_page=per_page, error_out=False)
+
 
         data = [f"{user.name} - {user.phone}" for user in users]
 
-        return jsonify(data), 200
+        return jsonify({
+            'users': data,
+            'total_pages': users.pages,
+            'current_page': page
+        }), 200
+
     except Exception as e:
+        print(e)
         return jsonify({'error': str(e)}), 500
     
 
-@admin.route('/v1/names-and-phones', methods=['GET'])
-def get_names_and_phones():
-    try:
-        users = UserModel.query.all()
-
-        data = [(user.name, user.phone) for user in users]
-
-        return jsonify(data), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 
+from sqlalchemy import or_
 # user table 
 
 @admin.route('/v1/users', methods=['GET'])
@@ -545,8 +559,23 @@ def get_all_users():
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
+        search_term = request.args.get('search', None, type=str)
 
-        users_paginated = UserModel.query.order_by(UserModel.user_id.asc()).paginate(page=page, per_page=per_page, error_out=False)
+        # Query users with optional search filter
+        query = UserModel.query
+
+        if search_term:
+            # Filter by name or phone containing the search term
+            query = query.filter(
+                or_(
+                    UserModel.name.ilike(f'%{search_term}%'),
+                    UserModel.phone.ilike(f'%{search_term}%')
+                )
+            )
+
+        # Paginate the filtered query
+        users_paginated = query.order_by(UserModel.user_id.asc()).paginate(
+            page=page, per_page=per_page, error_out=False)
 
         user_list = []
         for user in users_paginated.items:
@@ -572,6 +601,7 @@ def get_all_users():
     except Exception as e:
         print("An error occurred:", e)  # Print the error
         return jsonify({'error': 'An error occurred. Please try again later.'}), 500
+
 
 # pin table
 
