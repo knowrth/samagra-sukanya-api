@@ -1,11 +1,11 @@
 from .UserModels import UserModel, UserMap
 from datetime import datetime, timedelta
-from .db import db
+from .db import db, BaseModel
 from sqlalchemy.dialects.postgresql import UUID
 import pytz
 
 
-# class ReferralNetwork(db.Model):
+# class ReferralNetwork(BaseModel):
 #     __tablename__ = 'referral_network'
 
 #     id = db.Column(db.Integer, primary_key=True)
@@ -20,7 +20,7 @@ import pytz
 #     level8 = db.Column(db.String(36))
 #     level9 = db.Column(db.Text)
 
-# class TransactionModel(db.Model):
+# class TransactionModel(BaseModel):
 #     __tablename__ = 'transactions'
 
 #     id = db.Column(db.Integer, primary_key=True)
@@ -48,7 +48,7 @@ import pytz
 
 
 
-class ResetTokenModel(db.Model):
+class ResetTokenModel(BaseModel):
     __tablename__ = 'reset_tokens'
 
     token = db.Column(db.String(64), primary_key=True)
@@ -64,14 +64,14 @@ class ResetTokenModel(db.Model):
         self.valid_till = datetime.now(pytz.timezone('Asia/Kolkata')) + timedelta(minutes=15)
 
 
-class IncomeLevel(db.Model):
+class IncomeLevel(BaseModel):
     __tablename__ = 'income_level'
 
     id = db.Column(db.Integer, primary_key=True)
     level = db.Column(db.String(36))
     rate = db.Column(db.Integer)
 
-class SupportTicket(db.Model):
+class SupportTicket(BaseModel):
     __tablename__ = 'support'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)

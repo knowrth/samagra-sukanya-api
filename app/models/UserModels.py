@@ -2,7 +2,7 @@ import bcrypt
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy import func, Enum, text 
 from datetime import datetime
-from .db import db
+from .db import BaseModel, db
 from sqlalchemy.dialects.postgresql import UUID
 
 import uuid
@@ -14,7 +14,7 @@ import string
 
 
 
-class UserModel(db.Model):
+class UserModel(BaseModel):
     __tablename__ = 'users'
 
     user_id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -60,7 +60,7 @@ class UserModel(db.Model):
 
 
 
-class UserTransaction(db.Model):
+class UserTransaction(BaseModel):
     __tablename__ = 'user_transaction'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -87,7 +87,7 @@ class UserTransaction(db.Model):
         self.date_time = date_time
 
 
-class UserDetails(db.Model):
+class UserDetails(BaseModel):
     __tablename__ = 'user_details'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -131,7 +131,7 @@ class UserDetails(db.Model):
 
 
 
-class UserMap(db.Model):
+class UserMap(BaseModel):
     __tablename__ = 'userMap'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -141,7 +141,7 @@ class UserMap(db.Model):
     sponsor_id = db.Column(db.String(36))
 
 
-class UserBankDetails(db.Model):
+class UserBankDetails(BaseModel):
     __tablename__ = 'user_bank'
 
     id = db.Column(db.Integer, primary_key=True)

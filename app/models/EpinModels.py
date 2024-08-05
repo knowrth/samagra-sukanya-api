@@ -1,6 +1,6 @@
 from sqlalchemy import func, PrimaryKeyConstraint, Enum, String
 from datetime import datetime
-from .db import db
+from .db import db, BaseModel
 import uuid
 import random
 import string
@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 import uuid
 
-# class EPinModel(db.Model):
+# class EPinModel(BaseModel):
 #     __tablename__ = 'epins'
 
 #     id = db.Column(db.Integer, primary_key=True)
@@ -34,7 +34,7 @@ import uuid
 #         self.package = package
 
 
-class EPinTransaction(db.Model):
+class EPinTransaction(BaseModel):
     __tablename__ = 'epin_transaction'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
@@ -136,7 +136,7 @@ class EPinTransaction(db.Model):
         }
 
 
-class RegisterEPin(db.Model):
+class RegisterEPin(BaseModel):
     __tablename__ = 'registered_epins'
 
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.user_id'))
@@ -158,18 +158,18 @@ class RegisterEPin(db.Model):
         PrimaryKeyConstraint('user_id', 'epin'),
     )
 
-    def __init__(self, user_id, epin, level, commission, status, pre_wallet, after_wallet, member, trans_type, log_type, trans_note, phone=None, register_time=None):
-        self.user_id = user_id
-        self.epin = epin
-        self.level = level
-        self.commission = commission
-        self.phone = phone
-        self.status = status
-        self.date_time = datetime.now(pytz.timezone('Asia/Kolkata'))
-        self.register_time = register_time
-        self.pre_wallet = pre_wallet
-        self.after_wallet = after_wallet
-        self.member = member
-        self.trans_type = trans_type
-        self.log_type = log_type
-        self.trans_note = trans_note
+    # def __init__(self, user_id, epin, level, commission, status, pre_wallet, after_wallet, member, trans_type, log_type, trans_note, phone=None, register_time=None):
+    #     self.user_id = user_id
+    #     self.epin = epin
+    #     self.level = level
+    #     self.commission = commission
+    #     self.phone = phone
+    #     self.status = status
+    #     self.date_time = datetime.now(pytz.timezone('Asia/Kolkata'))
+    #     self.register_time = register_time
+    #     self.pre_wallet = pre_wallet
+    #     self.after_wallet = after_wallet
+    #     self.member = member
+    #     self.trans_type = trans_type
+    #     self.log_type = log_type
+    #     self.trans_note = trans_note

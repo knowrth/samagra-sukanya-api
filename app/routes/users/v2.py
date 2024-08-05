@@ -7,7 +7,7 @@ import uuid
 from models.UserModels import UserModel, UserDetails, UserMap, UserTransaction, UserBankDetails
 from sqlalchemy.exc import SQLAlchemyError
 from models.decorator import user_required
-
+from services.user_details_service import create_user_details, inser_user_img, get_user_img, path_info
 from datetime import datetime
 
 user_details = Blueprint('user_details', __name__,)
@@ -29,44 +29,60 @@ logger = logging.getLogger(__name__)
 def insert_user_details(user_id):
     try:
         data = request.json
-        existing_user = UserDetails.query.filter_by(user_id=user_id).first()
+        title = data.get('title')
+        gender = data.get('gender')
+        dob = data.get('dob')
+        father_name = data.get('father_name')
+        house_telephone = data.get('house_telephone')
+        email = data.get('email')
+        country = data.get('country')
+        state = data.get('state')
+        city = data.get('city')
+        pin_code = data.get('pin_code')
+        address = data.get('address')
+        marital_status = data.get('marital_status')
+        # existing_user = UserDetails.query.filter_by(user_id=user_id).first()
 
-        if existing_user:
-            existing_user.title = data.get('title', existing_user.title)
-            existing_user.gender = data.get('gender', existing_user.gender)
-            existing_user.dob = datetime.strptime(data['dob'], '%Y-%m-%d')
-            existing_user.father_name = data.get('father_name', existing_user.father_name)
-            existing_user.house_telephone = data.get('house_telephone', existing_user.house_telephone)
-            existing_user.email = data.get('email', existing_user.email)
-            existing_user.country = data.get('country', existing_user.country)
-            existing_user.state = data.get('state', existing_user.state)
-            existing_user.city = data.get('city', existing_user.city)
-            existing_user.pin_code = data.get('pin_code', existing_user.pin_code)
-            existing_user.address = data.get('address', existing_user.address)
-            existing_user.marital_status = data.get('marital_status', existing_user.marital_status)
+        # if existing_user:
+        #     existing_user.title = data.get('title', existing_user.title)
+        #     existing_user.gender = data.get('gender', existing_user.gender)
+        #     existing_user.dob = datetime.strptime(data['dob'], '%Y-%m-%d')
+        #     existing_user.father_name = data.get('father_name', existing_user.father_name)
+        #     existing_user.house_telephone = data.get('house_telephone', existing_user.house_telephone)
+        #     existing_user.email = data.get('email', existing_user.email)
+        #     existing_user.country = data.get('country', existing_user.country)
+        #     existing_user.state = data.get('state', existing_user.state)
+        #     existing_user.city = data.get('city', existing_user.city)
+        #     existing_user.pin_code = data.get('pin_code', existing_user.pin_code)
+        #     existing_user.address = data.get('address', existing_user.address)
+        #     existing_user.marital_status = data.get('marital_status', existing_user.marital_status)
 
-            db.session.commit()
-            return jsonify({'message': 'User details updated successfully.'}), 200
-        else:
-            new_user = UserDetails(
-                user_id=user_id,
-                title=data['title'],
-                gender=data['gender'],
-                dob=datetime.strptime(data['dob'], '%Y-%m-%d'),
-                father_name=data['father_name'],
-                house_telephone=data['house_telephone'],
-                email=data['email'],
-                country=data['country'],
-                state=data['state'],
-                city=data['city'],
-                pin_code=data['pin_code'],
-                address=data['address'],
-                marital_status=data['marital_status']
-            )
+        #     db.session.commit()
+        #     return jsonify({'message': 'User details updated successfully.'}), 200
+        # else:
+        #     new_user = UserDetails(
+        #         user_id=user_id,
+        #         title=data['title'],
+        #         gender=data['gender'],
+        #         dob=datetime.strptime(data['dob'], '%Y-%m-%d'),
+        #         father_name=data['father_name'],
+        #         house_telephone=data['house_telephone'],
+        #         email=data['email'],
+        #         country=data['country'],
+        #         state=data['state'],
+        #         city=data['city'],
+        #         pin_code=data['pin_code'],
+        #         address=data['address'],
+        #         marital_status=data['marital_status']
+        #     )
 
-            db.session.add(new_user)
-            db.session.commit()
-            return jsonify({'message': 'User details inserted successfully.'}), 201
+        #     db.session.add(new_user)
+        #     db.session.commit()
+        new_user_details = create_user_details(user_id=user_id, title=title, gender=gender, email=email, 
+                        country=country, state=state, dob=dob, father_name=father_name, house_telephone=house_telephone,
+                        city=city, pin_code=pin_code, address=address, marital_status=marital_status)
+        if new_user_details:
+            return new_user_details, 200
 
     except Exception as e:
         db.session.rollback()
@@ -87,18 +103,19 @@ def insert_user_details_img(user_id):
         if file.filename == '':
             return jsonify({'error': 'No selected file'}), 400
 
-        user = UserDetails.query.filter_by(user_id=user_id).first()
+        # user = UserDetails.query.filter_by(user_id=user_id).first()
 
-        if not user:
-            user = UserDetails(user_id=user_id)
+        # if not user:
+        #     user = UserDetails(user_id=user_id)
 
-        filename = generate_unique_filename(file.filename)
-        file.save(os.path.join(app.static_folder, filename))
-        user.image_url = filename
-        db.session.add(user)
-        db.session.commit()
-
-        return jsonify({'success': True, 'message': 'User details updated successfully'}), 200
+        # filename = generate_unique_filename(file.filename)
+        # file.save(os.path.join(app.static_folder, filename))
+        # user.image_url = filename
+        # db.session.add(user)
+        # db.session.commit()
+        user = inser_user_img(user_id=user_id, file=file)
+        if user:
+            return user, 200
 
     except Exception as e:
         db.session.rollback()
@@ -110,14 +127,17 @@ def insert_user_details_img(user_id):
 @user_details.route('/v2/user_image_name/<user_id>', methods=['GET'])
 def get_user_image_name(user_id):
     try:
-        user = UserDetails.query.filter_by(user_id=user_id).first()
+        # user = UserDetails.query.filter_by(user_id=user_id).first()
 
+        # if user:
+        #     image_name = user.image_url
+        #     # print('image:', image_name)
+        #     return send_from_directory('static', image_name)
+        # else:
+        #     return send_from_directory('static', 'profile.jpg')
+        user = get_user_img(user_id)
         if user:
-            image_name = user.image_url
-            # print('image:', image_name)
-            return send_from_directory('static', image_name)
-        else:
-            return send_from_directory('static', 'profile.jpg')
+            return user
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -129,6 +149,7 @@ def get_user_image_name(user_id):
 @user_details.route('/v2/path_info/<user_id>', methods=['GET'])
 @user_required
 def get_path_info(user_id):
+    
     results = db.session.query(
         func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
         func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', '')),
@@ -140,7 +161,7 @@ def get_path_info(user_id):
         func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
         func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', ''))
     ).all()
-
+    path_info(user_id)
     total_results = {}
     for row in results:
         pipe_count = min(row[0], 9) 
@@ -176,7 +197,7 @@ def get_path_info(user_id):
                 'amount': transaction.amount if transaction else None
             })
         level_data['users'] = user_info
-
+    
     data = list(total_results.values())
     return jsonify(data)
 
@@ -346,4 +367,24 @@ def user_nominee(user_id):
         return jsonify({'message': str(e)}), 500
 
 
+@user_details.route('/v1/names-and-phones', methods=['GET'])
+@user_required
+def get_names_and_phones():
+    try:
+        phone_start = request.args.get('phone_start')
+        
+        if not phone_start or len(phone_start) != 3 or not phone_start.isdigit():
+            return jsonify({'message': 'Invalid phone_start parameter. It must be a 3-digit number.'}), 400
 
+        users = UserModel.query.filter(UserModel.phone.like(f"{phone_start}%")).all()
+        
+        data = [{'name': user.name, 'phone': user.phone} for user in users]
+        
+        return jsonify(data), 200
+
+    except SQLAlchemyError as e:
+        # print(e)
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+    except Exception as e:
+        # print(e)
+        return jsonify({'error': str(e)}), 500

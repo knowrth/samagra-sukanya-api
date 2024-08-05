@@ -7,7 +7,7 @@ from models.UserModels import UserModel, UserTransaction,  UserBankDetails
 from models.EpinModels import  RegisterEPin
 from models.ReferencModels import  SupportTicket
 from models.decorator import user_required
-
+from services.user_team_service import get_transaction_summary, income_transaction_user, create_support_ticket, create_withdrawal_request
 from datetime import datetime
 
 transaction = Blueprint('transaction', __name__,)
@@ -21,22 +21,25 @@ transaction = Blueprint('transaction', __name__,)
 @user_required
 def get_income_transactions_by_user_id(user_id):
     try:
-        transactions = RegisterEPin.query.filter_by(user_id=user_id).order_by(desc(RegisterEPin.date_time)).all()
-        serialized_transactions = [{
-            'user_id': transaction.user_id,
-            'amount': transaction.commission,
-            'level': transaction.level,
-            'member': transaction.member,
-            'logType': transaction.log_type,
-            'pre_wallet_amount': transaction.pre_wallet,
-            'after_wallet_amount': transaction.after_wallet,
-            'transaction_mode_type': transaction.trans_type,
-            'transaction_note': transaction.trans_note,
-            'timestamp': transaction.date_time if transaction.date_time else None
-        } for transaction in transactions]
-        total_transaction_amount_query = db.session.query(func.sum(RegisterEPin.commission))\
-            .filter(RegisterEPin.user_id == user_id).scalar()
-        return jsonify({'transactions': serialized_transactions, 'total_amount': total_transaction_amount_query}), 200
+        # transactions = RegisterEPin.query.filter_by(user_id=user_id).order_by(desc(RegisterEPin.date_time)).all()
+        # serialized_transactions = [{
+        #     'user_id': transaction.user_id,
+        #     'amount': transaction.commission,
+        #     'level': transaction.level,
+        #     'member': transaction.member,
+        #     'logType': transaction.log_type,
+        #     'pre_wallet_amount': transaction.pre_wallet,
+        #     'after_wallet_amount': transaction.after_wallet,
+        #     'transaction_mode_type': transaction.trans_type,
+        #     'transaction_note': transaction.trans_note,
+        #     'timestamp': transaction.date_time if transaction.date_time else None
+        # } for transaction in transactions]
+        # total_transaction_amount_query = db.session.query(func.sum(RegisterEPin.commission))\
+        #     .filter(RegisterEPin.user_id == user_id).scalar()
+        # return jsonify({'transactions': serialized_transactions, 'total_amount': total_transaction_amount_query}), 200 
+        transaction = income_transaction_user(user_id)
+        if transaction:
+            return transaction
     except Exception as e:
         print(e)
         return jsonify({'error': 'Internal Server Error'}), 500
@@ -51,14 +54,16 @@ def user_transaction_summary():
     if not user_id:
         return jsonify({'error': 'User ID is required'}), 400
 
-    query_result = db.session.query(RegisterEPin.level, db.func.count(), db.func.sum(RegisterEPin.commission)) \
-        .filter(RegisterEPin.user_id == user_id) \
-        .group_by(RegisterEPin.level) \
-        .all()
+    # query_result = db.session.query(RegisterEPin.level, db.func.count(), db.func.sum(RegisterEPin.commission)) \
+    #     .filter(RegisterEPin.user_id == user_id) \
+    #     .group_by(RegisterEPin.level) \
+    #     .all()
 
-    summary = [{'level': row[0], 'count': row[1], 'sum_amount': row[2]} for row in query_result]
+    # summary = [{'level': row[0], 'count': row[1], 'sum_amount': row[2]} for row in query_result]
+    summary = get_transaction_summary(user_id)
+    if summary :
 
-    return jsonify(summary), 200
+        return summary, 200
 
 # Transaction
 
@@ -102,13 +107,11 @@ def support_ticket(user_id):
         query_description = data.get('query_description')
 
 
-        created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+        # created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
 
-        new_ticket = SupportTicket(user_id=user_id, query_type=query_type, query_title=query_title, query_desc=query_description, query_status="Open", date_time=created_at)
-        db.session.add(new_ticket)
-        db.session.commit()
-
-        return jsonify({'message': 'Support ticket created successfully.'}), 200
+        new_ticket = create_support_ticket(user_id=user_id, query_type=query_type, query_title=query_title, query_desc=query_description)
+        if new_ticket:
+            return new_ticket
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -149,35 +152,36 @@ def get_all_support_ticket(user_id):
 def user_withdrawal_request(user_id):
     data = request.json
     amount = data.get('amount')
-    user = UserModel.query.filter_by(user_id=user_id).first()
+    # user = UserModel.query.filter_by(user_id=user_id).first()
 
-    created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+    # created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
 
-    if user:
+    # if user:
 
-        bank_details = UserBankDetails.query.filter_by(user_id=user_id).first()
-        if not bank_details or not bank_details.bank_name or not bank_details.ifsc_code:
-            return jsonify({'message': 'User bank details (bank name or IFSC code) are missing. Please update bank details.'}), 400
+    #     bank_details = UserBankDetails.query.filter_by(user_id=user_id).first()
+    #     if not bank_details or not bank_details.bank_name or not bank_details.ifsc_code:
+    #         return jsonify({'message': 'User bank details (bank name or IFSC code) are missing. Please update bank details.'}), 400
 
-        withdrawal_request = UserTransaction(
-            user_id=user_id,
-            amount=amount,
-            remark=f"Request from {user.name} amount {amount}",
-            status='Pending',  
-            category='Withdrawals',
-            date_time=created_at,
-            sponsor_id= None,
-            type='Debit'
+    #     withdrawal_request = UserTransaction(
+    #         user_id=user_id,
+    #         amount=amount,
+    #         remark=f"Request from {user.name} amount {amount}",
+    #         status='Pending',  
+    #         category='Withdrawals',
+    #         date_time=created_at,
+    #         sponsor_id= None,
+    #         type='Debit'
 
 
-        )
-        db.session.add(withdrawal_request)
-        db.session.commit()
-        
-        
-        return jsonify({'message': 'Withdrawal successful'}), 200
-    else:
-        return jsonify({'error': 'User not found'}), 404
+    #     )
+    #     db.session.add(withdrawal_request)
+    #     db.session.commit()
+    try:
+        withdrawal_request = create_withdrawal_request(user_id=user_id, amount=amount)
+        if withdrawal_request:
+            return withdrawal_request, 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 
