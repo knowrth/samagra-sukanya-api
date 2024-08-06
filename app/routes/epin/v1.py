@@ -8,7 +8,7 @@ from models.ReferencModels import  IncomeLevel
 from models.decorator import user_required
 from routes.admin.v1 import check_sponsor
 from sqlalchemy.exc import IntegrityError
-from services.user_pin_service import create_user_with_epin, epin_transfer_epin, multiple_epin_transfer, get_transfer_epin_details, get_epin_count_by_user
+from services.user_pin_service import create_user_with_epin, epin_transfer_epin, multiple_epin_transfer, get_transfer_epin_details, get_epin_count_by_user, get_paginated_transactions
 
 import pytz
 from datetime import datetime
@@ -494,6 +494,8 @@ def get_transactions_by_user(user_id):
     try:
         page = request.args.get('page', default=1, type=int)
         per_page = request.args.get('per_page', default=10, type=int)
+        from_date = request.args.get('from_date')
+        to_date = request.args.get('to_date')
         
         # Query to get the latest transactions based on epin_id and created_at
         subquery = db.session.query(
@@ -516,7 +518,10 @@ def get_transactions_by_user(user_id):
         # Serialize paginated transactions to JSON
         serialized_transactions = [transaction.serialize() for transaction in paginated_transactions.items]
 
-        # Return JSON response with paginated data
+        # # Return JSON response with paginated data
+        
+        # response = get_paginated_transactions(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date)
+        # return response
         return jsonify({
             'transactions': serialized_transactions,
             'page': paginated_transactions.page,

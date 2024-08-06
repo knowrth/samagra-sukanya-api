@@ -7,7 +7,7 @@ import uuid
 from models.UserModels import UserModel, UserDetails, UserMap, UserTransaction, UserBankDetails
 from sqlalchemy.exc import SQLAlchemyError
 from models.decorator import user_required
-from services.user_details_service import create_user_details, inser_user_img, get_user_img, path_info
+from services.user_details_service import create_user_details, inser_user_img, get_user_img, path_info, user_bank_details, user_nominee_details, get_user_phone, get_user_direct_team
 from datetime import datetime
 
 user_details = Blueprint('user_details', __name__,)
@@ -149,57 +149,60 @@ def get_user_image_name(user_id):
 @user_details.route('/v2/path_info/<user_id>', methods=['GET'])
 @user_required
 def get_path_info(user_id):
-    
-    results = db.session.query(
-        func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
-        func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', '')),
-        func.array_agg(UserMap.user_id).label('user_ids')
-    ).join(UserModel, UserModel.user_id == UserMap.user_id).filter(UserMap.path.like(f'%{user_id}|%')).group_by(
-        func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
-        func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', ''))
-    ).order_by(
-        func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
-        func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', ''))
-    ).all()
-    path_info(user_id)
-    total_results = {}
-    for row in results:
-        pipe_count = min(row[0], 9) 
-        if pipe_count in total_results:
-            total_results[pipe_count]['user_ids'].extend(row[1])
-        else:
-            total_results[pipe_count] = {
-                'Level': pipe_count,
-                'user_ids': row[1]
-            }
+    level = request.args.get('level')
 
-    for level_data in total_results.values():
-        user_ids = level_data['user_ids']
-        user_info = []
-        for user_id in user_ids:
-            user = db.session.query(
-                UserModel.name,
-                UserModel.username,
-                UserModel.paid_status,
-                UserModel.phone,
-                UserModel.joining_date,
-                UserModel.sponsor_id
-            ).filter(UserModel.user_id == user_id).first()
-            sponsor = UserModel.query.filter_by(user_id=user.sponsor_id).first().name
-            transaction = UserTransaction.query.filter_by(user_id=user_id, category='Activation').first()
-            user_info.append({
-                'name': user.name,
-                'username': user.username,
-                'paid_status': user.paid_status,
-                'phone': user.phone,
-                'joining_date': user.joining_date,
-                'sponsor_by': sponsor,
-                'amount': transaction.amount if transaction else None
-            })
-        level_data['users'] = user_info
+    target_level = int(level)
     
-    data = list(total_results.values())
-    return jsonify(data)
+    # results = db.session.query(
+    #     func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
+    #     func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', '')),
+    #     func.array_agg(UserMap.user_id).label('user_ids')
+    # ).join(UserModel, UserModel.user_id == UserMap.user_id).filter(UserMap.path.like(f'%{user_id}|%')).group_by(
+    #     func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
+    #     func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', ''))
+    # ).order_by(
+    #     func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
+    #     func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', ''))
+    # ).all()
+    # path_info(user_id)
+    # total_results = {}
+    # for row in results:
+    #     pipe_count = min(row[0], 9) 
+    #     if pipe_count in total_results:
+    #         total_results[pipe_count]['user_ids'].extend(row[1])
+    #     else:
+    #         total_results[pipe_count] = {
+    #             'Level': pipe_count,
+    #             'user_ids': row[1]
+    #         }
+
+    # for level_data in total_results.values():
+    #     user_ids = level_data['user_ids']
+    #     user_info = []
+    #     for user_id in user_ids:
+    #         user = db.session.query(
+    #             UserModel.name,
+    #             UserModel.username,
+    #             UserModel.paid_status,
+    #             UserModel.phone,
+    #             UserModel.joining_date,
+    #             UserModel.sponsor_id
+    #         ).filter(UserModel.user_id == user_id).first()
+    #         sponsor = UserModel.query.filter_by(user_id=user.sponsor_id).first().name
+    #         transaction = UserTransaction.query.filter_by(user_id=user_id, category='Activation').first()
+    #         user_info.append({
+    #             'name': user.name,
+    #             'username': user.username,
+    #             'paid_status': user.paid_status,
+    #             'phone': user.phone,
+    #             'joining_date': user.joining_date,
+    #             'sponsor_by': sponsor,
+    #             'amount': transaction.amount if transaction else None
+    #         })
+    #     level_data['users'] = user_info
+    response = path_info(user_id=user_id, target_level=target_level)
+    # data = list(total_results.values())
+    return response
 
 
 def allowed_file(filename):
@@ -213,48 +216,51 @@ from sqlalchemy import and_
 @user_details.route('/v2/direct_team/<user_id>', methods=['GET'])
 @user_required
 def get_direct_team(user_id):
-    sponsor_details = UserModel.query.filter_by(sponsor_id=user_id).all()
-    direct_team_details = []
-    sponsor_name = UserModel.query.filter_by(user_id=user_id).first().name  
-    sponsor_username = UserModel.query.filter_by(user_id=user_id).first().username  
+    # sponsor_details = UserModel.query.filter_by(sponsor_id=user_id).all()
+    # direct_team_details = []
+    # sponsor_name = UserModel.query.filter_by(user_id=user_id).first().name  
+    # sponsor_username = UserModel.query.filter_by(user_id=user_id).first().username  
 
     
-    for user in sponsor_details:
-        user_details = UserModel.query.filter_by(user_id=user.user_id).first()
-        positive_transactions = UserTransaction.query.filter(and_(UserTransaction.user_id == user.user_id, UserTransaction.amount > 0.00)).all()
+    # for user in sponsor_details:
+    #     user_details = UserModel.query.filter_by(user_id=user.user_id).first()
+    #     positive_transactions = UserTransaction.query.filter(and_(UserTransaction.user_id == user.user_id, UserTransaction.amount > 0.00)).all()
         
-        if positive_transactions:
-            # Assuming you want to consider only the first positive transaction
-            first_positive_transaction = positive_transactions[0]
-            direct_team_details.append({
-                'user_id' : user_details.user_id,
-                'username': user_details.username,
-                'name': user_details.name,
-                'phone': user_details.phone,
-                'status': user_details.paid_status,
-                'joining_date': user_details.joining_date,
-                'amount': first_positive_transaction.amount,
-                'date_time': first_positive_transaction.date_time,
-            })
-        else:
-            direct_team_details.append({
-                'user_id' : user_details.user_id,
-                'username': user_details.username,
-                'name': user_details.name,
-                'phone': user_details.phone,
-                'status': user_details.paid_status,
-                'joining_date': user_details.joining_date,
-                'amount': '0',
-                'date_time': None,
-            })
+    #     if positive_transactions:
+    #         # Assuming you want to consider only the first positive transaction
+    #         first_positive_transaction = positive_transactions[0]
+    #         direct_team_details.append({
+    #             'user_id' : user_details.user_id,
+    #             'username': user_details.username,
+    #             'name': user_details.name,
+    #             'phone': user_details.phone,
+    #             'status': user_details.paid_status,
+    #             'joining_date': user_details.joining_date,
+    #             'amount': first_positive_transaction.amount,
+    #             'date_time': first_positive_transaction.date_time,
+    #         })
+    #     else:
+    #         direct_team_details.append({
+    #             'user_id' : user_details.user_id,
+    #             'username': user_details.username,
+    #             'name': user_details.name,
+    #             'phone': user_details.phone,
+    #             'status': user_details.paid_status,
+    #             'joining_date': user_details.joining_date,
+    #             'amount': '0',
+    #             'date_time': None,
+    #         })
     
-    response = {
-        'sponsor_name': sponsor_name,
-        'sponsor_username': sponsor_username,
-        'direct_team_details': direct_team_details
-    }
+    # response = {
+    #     'sponsor_name': sponsor_name,
+    #     'sponsor_username': sponsor_username,
+    #     'direct_team_details': direct_team_details
+    # }
+
+    response = get_user_direct_team(user_id=user_id)
     
-    return jsonify(response)
+    # return jsonify(response)
+    return response
 
 
 # user bank details
@@ -263,61 +269,68 @@ def get_direct_team(user_id):
 @user_required
 def user_bank(user_id):
     try:
-        # print(f"Received POST request for user ID: {user_id}")
-
-        if 'file' not in request.files:
-            # print("No file part in the request")
-            return jsonify({'message': 'No file part in the request'}), 400
         
-        file = request.files['file']
-        
-        if file.filename == '':
-            # print("No selected file")
-            return jsonify({'message': 'No selected file'}), 400
-        
-        if file and allowed_file(file.filename):
-            filename = generate_unique_filename(file.filename)
-            file.save(os.path.join(app.static_folder, filename))
-            # print(f"Saved file as: {filename}")
-        else:
-            # print("File type not allowed")
-            return jsonify({'message': 'File type not allowed'}), 400
-
         ifsc_code = request.form.get('ifsc_code')
         bank_name = request.form.get('bank_name')
         branch_name = request.form.get('branch_name')
         account_number = request.form.get('account_number')
         account_holder = request.form.get('account_holder')
 
+        filename=None
+        # print(f"Received POST request for user ID: {user_id}")
+        # file = request.files['file']
+        # if file:
+        #     if 'file' not in request.files:
+        #         # print("No file part in the request")
+        #         return jsonify({'message': 'No file part in the request'}), 400
+            
+            
+            
+        #     if file.filename == '':
+        #         # print("No selected file")
+        #         return jsonify({'message': 'No selected file'}), 400
+            
+        #     if file and allowed_file(file.filename):
+        #         filename = generate_unique_filename(file.filename)
+        #         file.save(os.path.join(app.static_folder, filename))
+        #         # print(f"Saved file as: {filename}")
+        #     else:
+        #         # print("File type not allowed")
+        #         return jsonify({'message': 'File type not allowed'}), 400
+        # else:
+        #     pass
+
+        
+
         # print(f"Received form data - IFSC Code: {ifsc_code}, Bank Name: {bank_name}, Branch Name: {branch_name}, Account Number: {account_number}, Account Holder: {account_holder}")
 
-        user_details = UserBankDetails.query.filter_by(user_id=user_id).first()
+        # user_details = UserBankDetails.query.filter_by(user_id=user_id).first()
         
-        if user_details:
-            # print("Updating existing user bank details")
-            user_details.file_url = filename  
-            user_details.ifsc_code = ifsc_code
-            user_details.bank_name = bank_name
-            user_details.branch_name = branch_name
-            user_details.account_number = account_number
-            user_details.account_holder = account_holder
-        else:
-            # print("Creating new user bank details")
-            user_details = UserBankDetails(
-                user_id=user_id,
-                file_url=filename, 
-                ifsc_code=ifsc_code,
-                bank_name=bank_name,
-                branch_name=branch_name,
-                account_number=account_number,
-                account_holder=account_holder,
-            )
-            db.session.add(user_details)
+        # if user_details:
+        #     # print("Updating existing user bank details")
+        #     user_details.file_url = filename  
+        #     user_details.ifsc_code = ifsc_code
+        #     user_details.bank_name = bank_name
+        #     user_details.branch_name = branch_name
+        #     user_details.account_number = account_number
+        #     user_details.account_holder = account_holder
+        # else:
+        #     # print("Creating new user bank details")
+        #     user_details = UserBankDetails(
+        #         user_id=user_id,
+        #         file_url=filename, 
+        #         ifsc_code=ifsc_code,
+        #         bank_name=bank_name,
+        #         branch_name=branch_name,
+        #         account_number=account_number,
+        #         account_holder=account_holder,
+        #     )
+        #     db.session.add(user_details)
         
-        db.session.commit()
+        # db.session.commit()
         # print("Committed changes to database")
-
-        return jsonify({'message': 'User bank details saved successfully'}), 200
+        response = user_bank_details(user_id=user_id, ifsc_code=ifsc_code, bank_name=bank_name, branch_name=branch_name, account_number=account_number, account_holder=account_holder)
+        return response, 200
     
     except SQLAlchemyError as e:
         db.session.rollback()
@@ -326,6 +339,7 @@ def user_bank(user_id):
     except Exception as e:
         # print(f"Error occurred: {str(e)}")
         return jsonify({'message': str(e)}), 500
+        
 
 
 # user nominee details
@@ -341,24 +355,26 @@ def user_nominee(user_id):
         nominee_dob = data.get('nominee_dob')
         print('nominee_name', nominee_name)
         
-        user_details = UserBankDetails.query.filter_by(user_id=user_id).first()
+        # user_details = UserBankDetails.query.filter_by(user_id=user_id).first()
         
-        if user_details:
-            user_details.nominee_name = nominee_name
-            user_details.nominee_relation = nominee_relation
-            user_details.nominee_dob = nominee_dob
-        else:
-            user_details = UserBankDetails(
-                user_id=user_id,
-                nominee_name=nominee_name,
-                nominee_relation=nominee_relation,
-                nominee_dob=nominee_dob
-            )
-            db.session.add(user_details)
+        # if user_details:
+        #     user_details.nominee_name = nominee_name
+        #     user_details.nominee_relation = nominee_relation
+        #     user_details.nominee_dob = nominee_dob
+        # else:
+        #     user_details = UserBankDetails(
+        #         user_id=user_id,
+        #         nominee_name=nominee_name,
+        #         nominee_relation=nominee_relation,
+        #         nominee_dob=nominee_dob
+        #     )
+        #     db.session.add(user_details)
         
-        db.session.commit()
+        # db.session.commit()
+
+        response = user_nominee_details(user_id=user_id,nominee_dob=nominee_dob, nominee_name=nominee_name, nominee_relation=nominee_relation )
         
-        return jsonify({'message': 'User details saved successfully'}), 200
+        return response, 200
     
     except SQLAlchemyError as e:
         db.session.rollback()
@@ -376,11 +392,13 @@ def get_names_and_phones():
         if not phone_start or len(phone_start) != 3 or not phone_start.isdigit():
             return jsonify({'message': 'Invalid phone_start parameter. It must be a 3-digit number.'}), 400
 
-        users = UserModel.query.filter(UserModel.phone.like(f"{phone_start}%")).all()
+        # users = UserModel.query.filter(UserModel.phone.like(f"{phone_start}%")).all()
         
-        data = [{'name': user.name, 'phone': user.phone} for user in users]
+        # data = [{'name': user.name, 'phone': user.phone} for user in users]
+
+        response = get_user_phone(phone_start=phone_start)
         
-        return jsonify(data), 200
+        return response, 200
 
     except SQLAlchemyError as e:
         # print(e)

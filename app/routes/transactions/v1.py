@@ -7,7 +7,7 @@ from models.UserModels import UserModel, UserTransaction,  UserBankDetails
 from models.EpinModels import  RegisterEPin
 from models.ReferencModels import  SupportTicket
 from models.decorator import user_required
-from services.user_team_service import get_transaction_summary, income_transaction_user, create_support_ticket, create_withdrawal_request
+from services.user_team_service import get_transaction_summary, income_transaction_user, create_support_ticket, create_withdrawal_request, get_transactions_table, get_withdrawal_table
 from datetime import datetime
 
 transaction = Blueprint('transaction', __name__,)
@@ -21,6 +21,12 @@ transaction = Blueprint('transaction', __name__,)
 @user_required
 def get_income_transactions_by_user_id(user_id):
     try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        from_date = request.args.get('from_date')
+        to_date = request.args.get('to_date')
+        # print('to_date', to_date)
+        # print('from_date', from_date)
         # transactions = RegisterEPin.query.filter_by(user_id=user_id).order_by(desc(RegisterEPin.date_time)).all()
         # serialized_transactions = [{
         #     'user_id': transaction.user_id,
@@ -37,7 +43,7 @@ def get_income_transactions_by_user_id(user_id):
         # total_transaction_amount_query = db.session.query(func.sum(RegisterEPin.commission))\
         #     .filter(RegisterEPin.user_id == user_id).scalar()
         # return jsonify({'transactions': serialized_transactions, 'total_amount': total_transaction_amount_query}), 200 
-        transaction = income_transaction_user(user_id)
+        transaction = income_transaction_user(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date)
         if transaction:
             return transaction
     except Exception as e:
@@ -75,20 +81,26 @@ def get_transactions_by_user_id(user_id):
     try:
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
+        from_date = request.args.get('from_date')
+        to_date = request.args.get('to_date')
+        # print('to_date', to_date)
+        # print('from_date', from_date)
 
-        transactions = UserTransaction.query.filter_by(user_id=user_id).order_by(desc(UserTransaction.date_time)).paginate(page=page, per_page=per_page, error_out=False)
-        serialized_transactions = [{
-            'user_id': transaction.user_id,
-            'amount': transaction.amount,
-            'type': transaction.type,
-            'category': transaction.category,
-            'remark': transaction.remark,
-            'timestamp': transaction.date_time if transaction.date_time else None
-        } for transaction in transactions]
-        return jsonify({'transactions': serialized_transactions,
-                        'total_pages': transactions.pages,
-                        'current_page': transactions.page,
-                        'total_supports': transactions.total}), 200
+        # transactions = UserTransaction.query.filter_by(user_id=user_id).order_by(desc(UserTransaction.date_time)).paginate(page=page, per_page=per_page, error_out=False)
+        # serialized_transactions = [{
+        #     'user_id': transaction.user_id,
+        #     'amount': transaction.amount,
+        #     'type': transaction.type,
+        #     'category': transaction.category,
+        #     'remark': transaction.remark,
+        #     'timestamp': transaction.date_time if transaction.date_time else None
+        # } for transaction in transactions]
+        # return jsonify({'transactions': serialized_transactions,
+        #                 'total_pages': transactions.pages,
+        #                 'current_page': transactions.page,
+        #                 'total_supports': transactions.total}), 200
+        response = get_transactions_table(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date)
+        return response
     except Exception as e:
         # print(e)
         return jsonify({'error': 'Internal Server Error'}), 500
@@ -192,17 +204,23 @@ def user_withdrawal_request(user_id):
 @user_required
 def get_withdrawals_by_user_id(user_id):
     try:
-        withdrawals = UserTransaction.query.filter_by(user_id=user_id, category="Withdrawals")\
-                                            .order_by(UserTransaction.date_time.desc())\
-                                            .all()
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        from_date = request.args.get('from_date')
+        to_date = request.args.get('to_date')
+        # withdrawals = UserTransaction.query.filter_by(user_id=user_id, category="Withdrawals")\
+        #                                     .order_by(UserTransaction.date_time.desc())\
+        #                                     .all()
         
-        serialized_withdrawals = [{'amount': withdrawal.amount, 
-                                    'type' : withdrawal.type,
-                                    'status': withdrawal.status,
-                                    'timestamp': withdrawal.date_time.strftime('%Y-%m-%d %H:%M:%S')} 
-                                    for withdrawal in withdrawals]
+        # serialized_withdrawals = [{'amount': withdrawal.amount, 
+        #                             'type' : withdrawal.type,
+        #                             'status': withdrawal.status,
+        #                             'timestamp': withdrawal.date_time.strftime('%Y-%m-%d %H:%M:%S')} 
+        #                             for withdrawal in withdrawals]
         
-        return jsonify({'withdrawals': serialized_withdrawals}), 200
+        # return jsonify({'withdrawals': serialized_withdrawals}), 200 
+        response = get_withdrawal_table(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date)
+        return response
     except Exception as e:
         print(e)
         return jsonify({'error': 'Internal Server Error'}), 500

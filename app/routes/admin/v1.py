@@ -400,7 +400,7 @@ def admin_issue_epin():
 
         #         else:
         #             pass
-        response = user_subscription(pin_type=amount, user_id=user_id, transaction_type=transaction_type, sponsor=sponsor_info)
+        response = user_subscription(pin_type=amount, user_id=user_id, transaction_type=transaction_type, sponsor=sponsor_info, transaction_note=transaction_note)
         return response
         # return jsonify({'message': 'Epin issued successfully'}), 200
     except Exception as e:
@@ -479,7 +479,7 @@ def pay_amount():
     #         db.session.commit()
             
         # return jsonify({'message': 'Amount paid successfully'}), 200
-        response = user_multiple_pins(amount=amount_str, count=count_value, name=name, phone=phone )
+        response = user_multiple_pins(amount_str=amount_str, count_value=count_value, name=name, phone=phone )
         return response
     
     except Exception as e:

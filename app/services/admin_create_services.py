@@ -109,10 +109,10 @@ def admin_user_password_reset(user_id, password):
         else:
             return jsonify({'error': 'User not found'})
 
-def user_subscription(pin_type, user_id, transaction_type, sponsor=None):
+def user_subscription(pin_type, user_id, transaction_type, transaction_note=None,  sponsor=None):
     with db.session() as session:
         #  Check if the user exists
-        user_stmt = select(UserModel).where(UserModel.user_id == user_id)
+        user_stmt = db.Select(UserModel).where(UserModel.user_id == user_id)
         user = session.execute(user_stmt).scalars().first()
         
         if not user:
@@ -128,35 +128,20 @@ def user_subscription(pin_type, user_id, transaction_type, sponsor=None):
         package = package_map.get(pin_type)
         if not package:
             return jsonify({'error': 'Invalid pin type'}), 400
-
+        
         # Update user information
         user_amt = Decimal(pin_type)
-        user_stmt = (
-            update(UserModel)
-            .where(UserModel.user_id == user_id)
-            .values(
-                amount_paid=UserModel.amount_paid + user_amt,
-                paid_type=transaction_type,
-                reg_status=package
-            )
-        )
-        session.execute(user_stmt)
-        
-        # Update user status 
-        if user.amount_paid + user_amt >= Decimal('2000'):
-            user_status_stmt = (
-                update(UserModel)
-                .where(UserModel.user_id == user_id)
-                .values(
-                    paid_status='PAID',
-                    user_status='ACTIVE',
-                    reg_status='Activated'
-                )
-            )
-            session.execute(user_status_stmt)
-
+        user.amount_paid += user_amt
+        user.paid_type = transaction_type
+        if user.amount_paid >= Decimal('2000'):
+            user.paid_status = 'PAID'
+            user.user_status = 'ACTIVE'
+            user.reg_status = 'Activated'
+        else:
+            user.reg_status = package
         session.commit()
 
+        # sponsor info
         sponsor_info = sponsor
         sponsor_id = None
         if sponsor_info:
@@ -172,8 +157,8 @@ def user_subscription(pin_type, user_id, transaction_type, sponsor=None):
             except ValueError:
                 sponsor_id = None
 
-        # Create new transaction record
-        created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+        # new transaction record
+        created_at = datetime.datetime.now(pytz.timezone('Asia/Kolkata'))
         remark = f"Paid {pin_type} {transaction_type}, {transaction_note}"
         transaction_stmt = UserTransaction(
                 user_id=user_id,
@@ -207,17 +192,23 @@ def user_subscription(pin_type, user_id, transaction_type, sponsor=None):
 
         return jsonify({'message': 'Epin issued successfully'}), 200
 
-def user_multiple_pins(amount, count, name, phone):
+def user_multiple_pins(amount_str, count_value, name, phone):
     with db.session() as session:
         # get for the user
-        user_stmt = select(UserModel).where(UserModel.name == name, UserModel.phone == phone)
+        user_stmt = db.Select(UserModel).where(UserModel.name == name, UserModel.phone == phone)
         user = session.execute(user_stmt).scalars().first()
 
         if not user:
             return jsonify({'error': 'User not found'}), 404
-
+        
+        # convert amount into decimal and count into int
+        amount = Decimal(amount_str)
+        count = int(count_value)
         user_id = user.user_id
+        created_at = datetime.datetime.now(pytz.timezone('Asia/Kolkata'))
+        
 
+        # user transaction created
         for _ in range(count):
             transaction_records = UserTransaction(
                 user_id = user_id,
@@ -231,9 +222,10 @@ def user_multiple_pins(amount, count, name, phone):
             )
             session.add(transaction_records)
 
-            pin_amount = '0.00' if amount == Decimal('0.00') else '500.00'
-            pin_type = '0 E-pin' if amount == Decimal('0.00') else '500 E-pin'
-            created_at = datetime.datetime.now(pytz.timezone('Asia/Kolkata'))
+            pin_amount = '0.00' if amount == Decimal('0.0') else '500.00'
+            pin_type = '0 E-pin' if amount == Decimal('0.0') else '500 E-pin'
+           
+            #eoin generation
             epin_records = EPinTransaction(
                 transaction_type = 'generate',
                 user_id = user_id,

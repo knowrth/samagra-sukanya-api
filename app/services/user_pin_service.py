@@ -3,7 +3,7 @@ import datetime
 from decimal import Decimal
 import pytz
 from sqlalchemy.sql import text
-from sqlalchemy import  func, or_, select
+from sqlalchemy import  func, or_, select, and_, desc
 
 from models.UserModels import UserMap, UserModel, UserTransaction
 from models.EpinModels import EPinTransaction, RegisterEPin
@@ -340,85 +340,89 @@ def get_user_by_id(user_id):
             selected_user = dict(user)
     selected_user
 
-
-# def list_user(
-#     filter_by:dict= None, 
-#     limit:int=10, 
-#     offset:int=0, 
-#     order_by:list= None
-# ):
-#     '''
-#     filter_by = {
-#         "name": "value1",
-#         "phone": "value2"
-#     }
-#     order_by = ["user_id", "name desc"]
-#     '''
-#     filters = []
-#     with db.session() as session:
-#         # Build the base query
-#         stmt = select(UserModel)
-        
-#         # Apply filters
-#         if filter_by:
-#             filters = [
-#                 getattr(UserModel, col).ilike(f'%{val}%') 
-#                 for col, val in filter_by.items()
-#             ]
-#             stmt = stmt.filter(or_(*filters))
-
-#         # Apply ordering
-#         if order_by:
-#             order_by_clauses = []
-#             for ob in order_by:
-#                 if ' desc' in ob:
-#                     col = ob.replace(' desc', '')
-#                     order_by_clauses.append(getattr(UserModel, col).desc())
-#                 else:
-#                     order_by_clauses.append(getattr(UserModel, ob))
-#             stmt = stmt.order_by(*order_by_clauses)
-
-#         # Apply pagination
-#         stmt = stmt.limit(limit).offset(offset)
-
-#         # Execute the statement and fetch results
-#         result = session.execute(stmt).scalars().fetchall()
-        
-#         # Fetch total count separately
-#         # count_stmt = select([func.count(UserModel.user_id)]).select_from(UserModel)
-
-#         # if filters:
-#         #     count_stmt = count_stmt.filter(or_(*filters))
-#         # total_users = session.execute(count_stmt)
-#         # total_user = total_users.scalar()
-        
-#         # Convert results to a list of dictionaries
-#         user_list = [dict(user.__dict__) for user in result]
+def get_paginated_transactions(user_id, page, per_page, from_date=None, to_date=None):
+    # Construct the subquery to get the latest created_at for each epin_id
+    subquery = (
+        select([
+            EPinTransaction.epin_id,
+            func.max(EPinTransaction.created_at).label('latest_created_at')
+        ])
+        .group_by(EPinTransaction.epin_id)
+        .subquery()
+    )
     
-#     return {
-#         'users': user_list,
-#         'total_users': result.count,
-#         'current_page': (offset // limit) + 1,
-#         'total_pages': (result // limit) + (1 if result % limit > 0 else 0)
-#     }
-
-
-
-# User details
-
-def create_user_details(sponsor_id, username, role, image_url=None, title=None, 
-                gender=None, dob=None, father_name=None, house_telephone=None,
-                email=None, country=None, state=None, city=None, pin_code=None, address=None,
-                marital_status=None):
-    new_user=None
-    with db.sesssion(expire_on_commit=False) as session:
-    # Check if sponsor exists
-        if role == "USER":
-            stmt = db.Select(UserModel).filter_by(user_id=sponsor_id)
-            sponsor = session.execute(stmt).scalars.first()
-            if sponsor is not None:
-                user = UserModel(sponsor_id=sponsor_id,role="USER")
-                session.add(user)
-                session.commit()
-                new_user = dict(user)
-    return new_user
+    # Main query to fetch transactions
+    main_query = (
+        select([EPinTransaction])
+        .select_from(
+            EPinTransaction.join(
+                subquery,
+                and_(
+                    EPinTransaction.epin_id == subquery.c.epin_id,
+                    EPinTransaction.created_at == subquery.c.latest_created_at
+                )
+            )
+        )
+        .where(
+            or_(
+                EPinTransaction.issued_to == user_id,
+                EPinTransaction.held_by == user_id
+            )
+        )
+        .order_by(desc(EPinTransaction.transaction_type))
+    )
+    
+    # Apply date filters if provided
+    if from_date:
+        main_query = main_query.where(EPinTransaction.created_at >= from_date)
+    
+    if to_date:
+        main_query = main_query.where(EPinTransaction.created_at <= to_date)
+    
+    # Execute the query to get the total count of items
+    total_count_query = (
+        select([func.count()])
+        .select_from(
+            select([EPinTransaction.epin_id])
+            .select_from(
+                EPinTransaction.join(
+                    subquery,
+                    and_(
+                        EPinTransaction.epin_id == subquery.c.epin_id,
+                        EPinTransaction.created_at == subquery.c.latest_created_at
+                    )
+                )
+            )
+            .where(
+                or_(
+                    EPinTransaction.issued_to == user_id,
+                    EPinTransaction.held_by == user_id
+                )
+            )
+        )
+    )
+    with db.session() as session:
+        total_count = session.execute(total_count_query).scalar()
+    
+        # Apply pagination
+        offset = (page - 1) * per_page
+        paginated_query = main_query.limit(per_page).offset(offset)
+    
+        # Execute the paginated query
+        with db.session() as session:
+            result = session.execute(paginated_query)
+            transactions = result.fetchall()
+    
+            # Serialize the results
+            serialized_transactions = [dict(row) for row in transactions]
+    
+            # Calculate total pages
+            total_pages = (total_count + per_page - 1) // per_page
+    
+            # Return JSON response with paginated data
+            return jsonify({
+                'transactions': serialized_transactions,
+                'page': page,
+                'total_pages': total_pages,
+                'total_items': total_count
+            })
