@@ -77,10 +77,6 @@ def get_user_tables(filter_by: Dict[str, str] = None, limit: int = 10, offset: i
         })
 
 def user_to_dict(user):
-    """
-    Convert SQLAlchemy model instance to a dictionary.
-    Adjust according to your model attributes.
-    """
     return {
         'user_id': user.user_id,
             'email': user.email,
@@ -139,9 +135,6 @@ def get_commission_tables(limit: int = 10, offset: int = 0):
         })
 
 def get_pending_withdrawals(page: int, per_page: int):
-    '''
-    Fetch pending withdrawal transactions with user details, ordered by transaction date.
-    '''
     with db.session() as session:
 
 

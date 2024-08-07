@@ -322,7 +322,14 @@ def get_pin_details(user_id):
     #         'transfer_at': latest_transaction.created_at.strftime("%Y-%m-%d %H:%M:%S") if latest_transaction else None
     #     })
     try:
-        transfer_pin = get_transfer_epin_details(user_id)
+        page = request.args.get('page', default=1, type=int)
+        per_page = request.args.get('per_page', default=10, type=int)
+        from_date = request.args.get('from_date')
+        to_date = request.args.get('to_date')
+        transaction_type = request.args.get('type')
+
+
+        transfer_pin = get_transfer_epin_details(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date, transaction_type=transaction_type)
         if transfer_pin:
             return transfer_pin
         else:
@@ -498,36 +505,39 @@ def get_transactions_by_user(user_id):
         to_date = request.args.get('to_date')
         
         # Query to get the latest transactions based on epin_id and created_at
-        subquery = db.session.query(
-            EPinTransaction.epin_id,
-            func.max(EPinTransaction.created_at).label('latest_created_at')
-        ).group_by(EPinTransaction.epin_id).subquery()
+        # subquery = db.session.query(
+        #     EPinTransaction.epin_id,
+        #     func.max(EPinTransaction.created_at).label('latest_created_at')
+        # ).group_by(EPinTransaction.epin_id).subquery()
 
-        # Main query to fetch transactions, ordered by transaction_type descending
-        transactions = db.session.query(EPinTransaction).\
-            join(subquery, and_(
-                EPinTransaction.epin_id == subquery.c.epin_id,
-                EPinTransaction.created_at == subquery.c.latest_created_at
-            )).\
-            filter(or_(EPinTransaction.issued_to == user_id, EPinTransaction.held_by == user_id)).\
-            order_by(desc(EPinTransaction.transaction_type))
+        # # Main query to fetch transactions, ordered by transaction_type descending
+        # transactions = db.session.query(EPinTransaction).\
+        #     join(subquery, and_(
+        #         EPinTransaction.epin_id == subquery.c.epin_id,
+        #         EPinTransaction.created_at == subquery.c.latest_created_at
+        #     )).\
+        #     filter(or_(EPinTransaction.issued_to == user_id, EPinTransaction.held_by == user_id)).\
+        #     order_by(desc(EPinTransaction.transaction_type))
 
-        # Paginate the results
-        paginated_transactions = transactions.paginate(page=page, per_page=per_page)
+        # # Paginate the results
+        # paginated_transactions = transactions.paginate(page=page, per_page=per_page)
 
-        # Serialize paginated transactions to JSON
-        serialized_transactions = [transaction.serialize() for transaction in paginated_transactions.items]
+        # # Serialize paginated transactions to JSON
+        # serialized_transactions = [transaction.serialize() for transaction in paginated_transactions.items]
 
-        # # Return JSON response with paginated data
+        # # # Return JSON response with paginated data
         
-        # response = get_paginated_transactions(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date)
-        # return response
-        return jsonify({
-            'transactions': serialized_transactions,
-            'page': paginated_transactions.page,
-            'total_pages': paginated_transactions.pages,
-            'total_items': paginated_transactions.total
-        }), 200
+        # # response = get_paginated_transactions(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date)
+        # # return response
+        # return jsonify({
+        #     'transactions': serialized_transactions,
+        #     'page': paginated_transactions.page,
+        #     'total_pages': paginated_transactions.pages,
+        #     'total_items': paginated_transactions.total
+        # }), 200
+
+        response = get_paginated_transactions(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date)
+        return response
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

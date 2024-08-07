@@ -1,10 +1,10 @@
 from models.db import db
-import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 import pytz
 from sqlalchemy.sql import text
 from sqlalchemy import  func, or_, select, and_, desc
-
+from math import ceil
 from models.UserModels import UserMap, UserModel, UserTransaction
 from models.EpinModels import EPinTransaction, RegisterEPin
 from models.ReferencModels import income_levels
@@ -214,32 +214,61 @@ def multiple_epin_transfer(pin, user_id, phone, name):
 
 
 
-def get_transfer_epin_details(user_id):
+def get_transfer_epin_details(user_id, transaction_type, page, per_page, from_date=None, to_date=None):
     sent_pin_details = []
     received_pin_details = []
+
     with db.session() as session:
-    # Fetch all issued pins
-        stmt = db.Select(EPinTransaction).filter_by(sponsor_id=user_id, transaction_type='transfer')
-        issued_pins = session.execute(stmt).scalars().all()
+        # Define base query
+        base_query = db.Select(EPinTransaction)
+        
+        if transaction_type not in ['sent', 'received']:
+            return jsonify({'error': 'Invalid transaction type. Must be "sent" or "received".'}), 400
+        
+        # Filter by transaction type and user
+        if transaction_type == 'sent':
+            base_query = base_query.where(
+                and_(EPinTransaction.sponsor_id == user_id, EPinTransaction.transaction_type == 'transfer')
+            )
+        elif transaction_type == 'received':
+            base_query = base_query.where(
+                and_(EPinTransaction.user_id == user_id, EPinTransaction.transaction_type == 'transfer')
+            )
 
-            # Process issued pins
-        for pin in issued_pins:
-                # Fetch latest transaction and creation time
-                latest_stmt = db.Select(EPinTransaction).filter_by(epin_id=pin.epin_id).order_by(text('created_at desc'))
-                latest_transaction = session.execute(latest_stmt).scalars().first()
+        # Apply date filters if provided
+        if from_date:
+            from_date = datetime.strptime(from_date, '%Y-%m-%d')
+            base_query = base_query.where(EPinTransaction.created_at >= from_date)
+        if to_date:
+            to_date = datetime.strptime(to_date, '%Y-%m-%d') + timedelta(days=1) - timedelta(milliseconds=1)
+            base_query = base_query.where(EPinTransaction.created_at <= to_date)
+        
+        # Pagination
+        offset = (page - 1) * per_page
+        paginated_query = base_query.order_by(desc(EPinTransaction.created_at)).limit(per_page).offset(offset)
 
-                created_stmt = db.Select(EPinTransaction).filter_by(epin_id=pin.epin_id, transaction_type='generate')
-                created = session.execute(created_stmt).scalars().first()
-                created_at_time = created.created_at if created else None
+        # Fetch paginated results
+        pins = session.execute(paginated_query).scalars().all()
+        
+        for pin in pins:
+            # Fetch latest transaction and creation time
+            latest_stmt = select(EPinTransaction).where(EPinTransaction.epin_id == pin.epin_id).order_by(desc(EPinTransaction.created_at))
+            latest_transaction = session.execute(latest_stmt).scalars().first()
 
-                # Fetch names
-                issued_to_name = get_user_name(pin.sponsor_id)
-                held_by_name = get_user_name(pin.user_id)
-                used_by_name = get_user_name(latest_transaction.used_by) if latest_transaction and latest_transaction.used_by else None
-                registered_to_name = get_user_name(latest_transaction.registered_to) if latest_transaction and latest_transaction.registered_to else None
+            created_stmt = select(EPinTransaction).where(and_(EPinTransaction.epin_id == pin.epin_id, EPinTransaction.transaction_type == 'generate'))
+            created = session.execute(created_stmt).scalars().first()
+            created_at_time = created.created_at if created else None
 
-                package = 'Registration Package' if pin.pin_amount == 500 else 'User Package'
+            # Fetch names
+            issued_to_name = get_user_name(pin.sponsor_id)
+            held_by_name = get_user_name(pin.user_id)
+            used_by_name = get_user_name(latest_transaction.used_by) if latest_transaction and latest_transaction.used_by else None
+            registered_to_name = get_user_name(latest_transaction.registered_to) if latest_transaction and latest_transaction.registered_to else None
 
+            package = 'Registration Package' if pin.pin_amount == 500 else 'User Package'
+
+            # Append details based on transaction type
+            if transaction_type == 'sent':
                 sent_pin_details.append({
                     'pin_id': pin.pin,
                     'amount': pin.pin_amount,
@@ -251,29 +280,7 @@ def get_transfer_epin_details(user_id):
                     'created_at': created_at_time.strftime("%Y-%m-%d %H:%M:%S") if created_at_time else None,
                     'transfer_at': latest_transaction.created_at.strftime("%Y-%m-%d %H:%M:%S") if latest_transaction else None
                 })
-
-            # Fetch all received pins
-        stmt = db.Select(EPinTransaction).filter_by(user_id=user_id, transaction_type='transfer')
-        received_pins = session.execute(stmt).scalars().all()
-
-            # Process received pins
-        for pin in received_pins:
-                # Fetch latest transaction and creation time
-                latest_stmt = db.Select(EPinTransaction).filter_by(epin_id=pin.epin_id).order_by(text('created_at desc'))
-                latest_transaction = session.execute(latest_stmt).scalars().first()
-
-                created_stmt = db.Select(EPinTransaction).filter_by(epin_id=pin.epin_id, transaction_type='generate')
-                created = session.execute(created_stmt).scalars().first()
-                created_at_time = created.created_at if created else None
-
-                # Fetch names
-                issued_to_name = get_user_name(pin.sponsor_id)
-                held_by_name = get_user_name(pin.user_id)
-                used_by_name = get_user_name(latest_transaction.used_by) if latest_transaction and latest_transaction.used_by else None
-                registered_to_name = get_user_name(latest_transaction.registered_to) if latest_transaction and latest_transaction.registered_to else None
-
-                package = 'Registration Package' if pin.pin_amount == 500 else 'User Package'
-
+            elif transaction_type == 'received':
                 received_pin_details.append({
                     'pin_id': pin.pin,
                     'amount': pin.pin_amount,
@@ -286,8 +293,18 @@ def get_transfer_epin_details(user_id):
                     'transfer_at': latest_transaction.created_at.strftime("%Y-%m-%d %H:%M:%S") if latest_transaction else None
                 })
 
+        # Count total records
+        total_count_stmt = select(func.count()).select_from(base_query.subquery())
+        total_count = session.execute(total_count_stmt).scalar()
+        total_pages = ceil(total_count / per_page)
 
-    return jsonify({'sent_pin_details': sent_pin_details, 'received_pin_details': received_pin_details})
+        return jsonify({
+            'sent_pin_details': sent_pin_details if transaction_type == 'sent' else [],
+            'received_pin_details': received_pin_details if transaction_type == 'received' else [],
+            'page': page,
+            'total_pages': total_pages,
+            'total_items': total_count
+        })
 
 
 def get_user_name(user_id):
@@ -341,88 +358,139 @@ def get_user_by_id(user_id):
     selected_user
 
 def get_paginated_transactions(user_id, page, per_page, from_date=None, to_date=None):
-    # Construct the subquery to get the latest created_at for each epin_id
-    subquery = (
-        select([
-            EPinTransaction.epin_id,
-            func.max(EPinTransaction.created_at).label('latest_created_at')
-        ])
-        .group_by(EPinTransaction.epin_id)
-        .subquery()
-    )
+    with db.session() as session:
+        subquery = (
+            select(
+                EPinTransaction.epin_id,
+                func.max(EPinTransaction.created_at).label('latest_created_at')
+            )
+            .group_by(EPinTransaction.epin_id)
+            .order_by(desc(func.max(EPinTransaction.created_at)))
+            .subquery()
+        )
     
-    # Main query to fetch transactions
-    main_query = (
-        select([EPinTransaction])
-        .select_from(
-            EPinTransaction.join(
-                subquery,
-                and_(
+        # Main query to fetch transactions
+        transactions_stmt = (
+            select(EPinTransaction)
+            .join(subquery, and_(
+                EPinTransaction.epin_id == subquery.c.epin_id,
+                EPinTransaction.created_at == subquery.c.latest_created_at
+            ))
+            .where(
+                or_(EPinTransaction.issued_to == user_id, EPinTransaction.held_by == user_id)
+            )
+            .order_by(desc(subquery.c.latest_created_at))
+        )
+        
+        if from_date:
+            transactions_stmt = transactions_stmt.where(EPinTransaction.created_at >= datetime.strptime(from_date, '%Y-%m-%d'))
+        if to_date:
+            end_of_day = datetime.strptime(to_date, '%Y-%m-%d') + timedelta(days=1) - timedelta(milliseconds=1)
+            transactions_stmt = transactions_stmt.where(EPinTransaction.created_at <= end_of_day)
+        
+        offset = (page - 1) * per_page
+        
+        # Subquery for counting total transactions
+        total_stmt = (
+            select(func.count())
+            .select_from(
+                select(EPinTransaction)
+                .join(subquery, and_(
                     EPinTransaction.epin_id == subquery.c.epin_id,
                     EPinTransaction.created_at == subquery.c.latest_created_at
+                ))
+                .where(
+                    or_(EPinTransaction.issued_to == user_id, EPinTransaction.held_by == user_id)
+                )
+                .where(
+                    EPinTransaction.created_at >= (datetime.strptime(from_date, '%Y-%m-%d') if from_date else datetime.min)
+                )
+                .where(
+                    EPinTransaction.created_at <= (end_of_day if to_date else datetime.max)
                 )
             )
         )
-        .where(
-            or_(
-                EPinTransaction.issued_to == user_id,
-                EPinTransaction.held_by == user_id
-            )
-        )
-        .order_by(desc(EPinTransaction.transaction_type))
-    )
     
-    # Apply date filters if provided
-    if from_date:
-        main_query = main_query.where(EPinTransaction.created_at >= from_date)
+        total_count = session.execute(total_stmt).scalar()
+
+        limit_stmt = transactions_stmt.limit(per_page).offset(offset)
+        transactions = session.execute(limit_stmt).scalars().all()
+
+        total_pages = ceil(total_count / per_page)
+
+        serialized_transactions = [transaction.serialize() for transaction in transactions]
+
+        return jsonify({
+            'transactions': serialized_transactions,
+            'page': (offset // per_page) + 1,
+            'total_pages': total_pages,
+            'total_items': total_count
+        })
     
-    if to_date:
-        main_query = main_query.where(EPinTransaction.created_at <= to_date)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # # Execute the query to get the total count of items
+    # total_count_query = (
+    #     select([func.count()])
+    #     .select_from(
+    #         select([EPinTransaction.epin_id])
+    #         .select_from(
+    #             EPinTransaction.join(
+    #                 subquery,
+    #                 and_(
+    #                     EPinTransaction.epin_id == subquery.c.epin_id,
+    #                     EPinTransaction.created_at == subquery.c.latest_created_at
+    #                 )
+    #             )
+    #         )
+    #         .where(
+    #             or_(
+    #                 EPinTransaction.issued_to == user_id,
+    #                 EPinTransaction.held_by == user_id
+    #             )
+    #         )
+    #     )
+    # )
     
-    # Execute the query to get the total count of items
-    total_count_query = (
-        select([func.count()])
-        .select_from(
-            select([EPinTransaction.epin_id])
-            .select_from(
-                EPinTransaction.join(
-                    subquery,
-                    and_(
-                        EPinTransaction.epin_id == subquery.c.epin_id,
-                        EPinTransaction.created_at == subquery.c.latest_created_at
-                    )
-                )
-            )
-            .where(
-                or_(
-                    EPinTransaction.issued_to == user_id,
-                    EPinTransaction.held_by == user_id
-                )
-            )
-        )
-    )
-    with db.session() as session:
-        total_count = session.execute(total_count_query).scalar()
+    #     total_count = session.execute(total_count_query).scalar()
     
-        # Apply pagination
-        offset = (page - 1) * per_page
-        paginated_query = main_query.limit(per_page).offset(offset)
+    #     # Apply pagination
+    #     offset = (page - 1) * per_page
+    #     paginated_query = main_query.limit(per_page).offset(offset)
     
-        # Execute the paginated query
-        with db.session() as session:
-            result = session.execute(paginated_query)
-            transactions = result.fetchall()
+    #     # Execute the paginated query
+    #     with db.session() as session:
+    #         result = session.execute(paginated_query)
+    #         transactions = result.fetchall()
     
-            # Serialize the results
-            serialized_transactions = [dict(row) for row in transactions]
+    #         # Serialize the results
+    #         serialized_transactions = [dict(row) for row in transactions]
     
-            # Calculate total pages
-            total_pages = (total_count + per_page - 1) // per_page
+    #         # Calculate total pages
+    #         total_pages = (total_count + per_page - 1) // per_page
     
-            # Return JSON response with paginated data
-            return jsonify({
-                'transactions': serialized_transactions,
-                'page': page,
-                'total_pages': total_pages,
-                'total_items': total_count
-            })
+    #         # Return JSON response with paginated data
+    #         return jsonify({
+    #             'transactions': serialized_transactions,
+    #             'page': page,
+    #             'total_pages': total_pages,
+    #             'total_items': total_count
+    #         })
