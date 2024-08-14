@@ -110,7 +110,7 @@ def income_transaction_user(user_id, page, per_page, from_date, to_date  ):
                         'total_supports': total_count})
 
 def create_support_ticket(user_id, query_type, query_title, query_desc):
-    created_at = datetime.datetime.now(pytz.timezone('Asia/Kolkata'))
+    created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
     with db.session() as session:
         new_ticket = SupportTicket(user_id=user_id, query_type=query_type, query_title=query_title, query_desc=query_desc, query_status="Open", date_time=created_at)
         session.add(new_ticket)
@@ -119,7 +119,7 @@ def create_support_ticket(user_id, query_type, query_title, query_desc):
 
 def create_withdrawal_request(user_id, amount):
     with db.session() as session:
-        created_at = datetime.datetime.now(pytz.timezone('Asia/Kolkata'))
+        created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
 
         #check bank details
         stmt = db.Select(UserBankDetails).filter_by(user_id=user_id)

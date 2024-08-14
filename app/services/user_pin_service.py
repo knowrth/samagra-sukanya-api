@@ -44,7 +44,7 @@ def create_user_with_epin(epin, sponsor_id, phone, role, password, name="Unknown
         # session.commit()
         epin_user = str(user.user_id)
         # update epin-transaction
-        created_at = datetime.datetime.now(pytz.timezone('Asia/Kolkata'))
+        created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
         new_epin = EPinTransaction(epin_id=epin_transaction.epin_id, 
                                 transaction_type="registered",
                                 user_id=epin_user,
@@ -76,7 +76,7 @@ def create_user_with_epin(epin, sponsor_id, phone, role, password, name="Unknown
 
         if epin_transaction.pin_type in ['500 E-pin', '2000 E-pin']:
             transactions = []
-            created_at = datetime.datetime.now(pytz.timezone('Asia/Kolkata'))
+            created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
             sponsors = user_map.path.split('|')[::-1]
             sponsors = [sponsor for sponsor in sponsors if sponsor.strip()]
             for i in range(len(sponsors)):
@@ -148,7 +148,7 @@ def epin_transfer_epin(pin, user_id, phone, name):
             
             # pin transfer
             if  epin.transaction_type != "registered":
-                created_at = datetime.datetime.now(pytz.timezone('Asia/Kolkata'))
+                created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
                 transfer_epin = EPinTransaction(
                 epin_id=epin.epin_id,
                 transaction_type="transfer",
@@ -168,50 +168,68 @@ def epin_transfer_epin(pin, user_id, phone, name):
                 
     return new_transfer_pin
 
+# import logging
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# logger = logging.getLogger(__name__)
 
 def multiple_epin_transfer(pin, user_id, phone, name):
-    new_transfer_pin=None
-    with db.session() as session:
-            #check user availability
-            stmt = db.Select(UserModel).filter_by(phone=phone, name=name)
+    new_transfer_pin = None
+    try:
+        with db.session() as session:
+            # Check user availability
+            stmt = db.select(UserModel).filter_by(phone=phone, name=name)
             user = session.execute(stmt).scalars().first()
-            if user is  None:
+            
+            if user is None:
+                # logger.warning(f"User not found with phone: {phone} and name: {name}")
                 return jsonify({'message': 'User not found with the provided phone and name'}), 404
             
-            pin_list = pin.split(',')
+            pin_list = [x.strip() for x in pin.split(',')]
             for x in pin_list:
-                # pin availability
-                stmt = db.Select(EPinTransaction).filter_by(pin=x).order_by(text('created_at desc'))
+                # logger.info(f"Processing PIN: {x}")
+
+                # Check pin availability
+                stmt = db.select(EPinTransaction).filter_by(pin=x).order_by(text('created_at desc'))
                 epin = session.execute(stmt).scalars().first()
+                
                 if epin is None:
+                    # logger.warning(f"EPin transaction not found for PIN: {x}")
                     return jsonify({'message': 'EPin transaction not found'}), 404
                 
-                # pin accountability
+                # Check pin accountability
                 if epin.user_id != user_id:
+                    # logger.warning(f"EPin with PIN: {x} is already transferred to another user (user_id: {epin.user_id})")
                     return jsonify({'message': 'EPin is already transferred to another user'}), 400
-                
-                # pin transfer
-                if  epin.transaction_type != "registered":
-                    created_at = datetime.datetime.now(pytz.timezone('Asia/Kolkata'))
+
+                # Pin transfer
+                if epin.transaction_type != "registered":
+                    created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
                     transfer_epin = EPinTransaction(
-                    epin_id=epin.epin_id,
-                    transaction_type="transfer",
-                    user_id=user.user_id,
-                    sponsor_id=epin.user_id,
-                    created_at=created_at,
-                    pin=epin.pin,
-                    pin_type=epin.pin_type,
-                    pin_amount=epin.pin_amount,
-                    issued_to=epin.issued_to,
-                    held_by=user.user_id,
-                )
+                        epin_id=epin.epin_id,
+                        transaction_type="transfer",
+                        user_id=user.user_id,
+                        sponsor_id=epin.user_id,
+                        created_at=created_at,
+                        pin=epin.pin,
+                        pin_type=epin.pin_type,
+                        pin_amount=epin.pin_amount,
+                        issued_to=epin.issued_to,
+                        held_by=user.user_id,
+                    )
+                    
+                    session.add(transfer_epin)
+                    session.commit()
+                    # logger.info(f"Added new transfer EPin with PIN: {x}")
 
-                session.add(transfer_epin)
-            session.commit()
+            
             new_transfer_pin = epin.to_dict()
-                
-    return new_transfer_pin
+            # logger.info(f"EPin transfer completed for PIN: {x}")
+            
+    except Exception as e:
+        # logger.error(f"An error occurred during EPin transfer: {e}")
+        return jsonify({'message': 'An error occurred during EPin transfer'}), 500
 
+    return jsonify(new_transfer_pin)
 
 
 def get_transfer_epin_details(user_id, transaction_type, page, per_page, from_date=None, to_date=None):

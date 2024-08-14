@@ -292,10 +292,21 @@ def get_user_direct_team(user_id):
             'direct_team_details': direct_team_details
             }
         return jsonify(response)
+    
+
+
 from collections import defaultdict
+
+
 def get_sponsor_stats(user_id):
     with db.session() as session:
-        stmt = db.select(UserMap)
+        pattern = f"%{user_id}|%"
+
+        stmt = (
+            db.session.query(UserMap)
+            .filter(UserMap.path.like(pattern))
+        )
+        
         data = session.execute(stmt).scalars().all()
 
         level_summary = defaultdict(lambda: {
@@ -313,7 +324,7 @@ def get_sponsor_stats(user_id):
                 if user_id in ids_in_path:
                     level = ids_in_path.index(user_id) + 1
                     
-                    user_stmt = db.select(UserModel).filter_by(user_id=entry.user_id)
+                    user_stmt = select(UserModel).filter_by(user_id=entry.user_id)
                     user_details = session.execute(user_stmt).scalars().first()
                     
                     if user_details:
@@ -323,9 +334,30 @@ def get_sponsor_stats(user_id):
                             level_summary[level]['paid_count'] += 1
                         else:
                             level_summary[level]['unpaid_count'] += 1
-        
+
+        aggregated_summary = defaultdict(lambda: {
+            'paid_count': 0,
+            'sponsor_count': 0,
+            'unpaid_count': 0
+        })
+
+        for level, counts in level_summary.items():
+            if level >= 9:
+                aggregated_summary[9]['sponsor_count'] += counts['sponsor_count']
+                aggregated_summary[9]['paid_count'] += counts['paid_count']
+                aggregated_summary[9]['unpaid_count'] += counts['unpaid_count']
+            else:
+                aggregated_summary[level] = counts
+
+        if 9 not in aggregated_summary:
+            aggregated_summary[9] = {
+                'paid_count': 0,
+                'sponsor_count': 0,
+                'unpaid_count': 0
+            }
+
         result = []
-        for level, counts in sorted(level_summary.items()):
+        for level, counts in sorted(aggregated_summary.items()):
             result.append({
                 'Level': level,
                 'paid_count': counts['paid_count'],
@@ -338,10 +370,14 @@ def get_sponsor_stats(user_id):
 
 def path_info(user_id, target_level: int = 1):
     with db.session() as session:
-        
+
+        pattern = f"%{user_id}|%"
+
         stmt = (
-            db.select(UserMap)
-        )
+                db.session.query(UserMap)
+                .filter(UserMap.path.like(pattern))
+            )
+
         
         data = session.execute(stmt).scalars().all()
         result = []

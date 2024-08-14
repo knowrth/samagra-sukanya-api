@@ -221,7 +221,7 @@ def transfer_multiple_epin():
     name = data.get('name')
     phone = data.get('phone')
     user_id = data.get('user_id')
-    # print('Pins:', pin)
+    print('Pins:', pin)
 
     # new_user = UserModel.query.filter_by(name=name, phone=phone).first()
     # if not new_user:
