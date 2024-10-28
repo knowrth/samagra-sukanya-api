@@ -17,9 +17,9 @@ def create_user_with_epin(epin, sponsor_id, phone, role, password, name="Unknown
     
     with db.session() as session:
         #get epin
-        stmt = db.Select(EPinTransaction).filter_by(pin=epin) 
+        stmt = db.Select(EPinTransaction).filter_by(pin=epin).order_by(text('created_at desc')) 
         epin_transaction = session.execute(stmt).scalars().first()
-        if epin_transaction is None or epin_transaction.transaction_type !="generate":
+        if epin_transaction is None :
             return None
         
         # get sponsor
@@ -27,9 +27,12 @@ def create_user_with_epin(epin, sponsor_id, phone, role, password, name="Unknown
         sponsor = session.execute(stmt).scalars().first()
         if sponsor is None:
             return None
-        
+        # print(f"name: '{name}'")
+        new_user_name = name.strip()
+        # print('new_user_name', new_user_name)
+
         # create user
-        user = UserModel(sponsor_id=sponsor_id,role="USER", phone=phone, name=name,
+        user = UserModel(sponsor_id=sponsor_id,role="USER", phone=phone, name=new_user_name,
                                     paid_status=paid_status, user_status=user_status, password=password)
         user.username = user.generate_username()
         session.add(user)
@@ -89,7 +92,7 @@ def create_user_with_epin(epin, sponsor_id, phone, role, password, name="Unknown
                     type='Receipt',  
                     category='Commission',
                     amount=str(rate),
-                    remark=f"Level Income {i+1} from {name}",
+                    remark=f"Level Income {i+1} from {new_user_name}",
                     date_time=created_at,
                     sponsor_id= None,
                     status=None
@@ -383,7 +386,6 @@ def get_paginated_transactions(user_id, page, per_page, from_date=None, to_date=
                 func.max(EPinTransaction.created_at).label('latest_created_at')
             )
             .group_by(EPinTransaction.epin_id)
-            .order_by(desc(func.max(EPinTransaction.created_at)))
             .subquery()
         )
     
@@ -397,7 +399,11 @@ def get_paginated_transactions(user_id, page, per_page, from_date=None, to_date=
             .where(
                 or_(EPinTransaction.issued_to == user_id, EPinTransaction.held_by == user_id)
             )
-            .order_by(desc(subquery.c.latest_created_at))
+            .order_by(
+                desc(subquery.c.latest_created_at),
+                EPinTransaction.epin_id,  
+                EPinTransaction.created_at 
+            )
         )
         
         if from_date:

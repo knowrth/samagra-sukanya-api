@@ -385,7 +385,11 @@ def get_epins_list(page: int = 1, per_page: int = 10):
                     EPinTransaction.epin_id == subquery.c.epin_id,
                     EPinTransaction.created_at == subquery.c.latest_created_at
                 ))
-                .order_by(desc(subquery.c.latest_created_at))
+                .order_by(
+                desc(subquery.c.latest_created_at),
+                EPinTransaction.epin_id,  
+                EPinTransaction.created_at 
+            )
             )
 
             # pagination

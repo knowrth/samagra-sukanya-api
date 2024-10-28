@@ -199,7 +199,44 @@ def get_transactions_table(user_id, page, per_page, from_date, to_date  ):
                         'total_pages': total_pages,
                         'current_page': (offset // per_page) + 1,
                         'total_supports': total_count})
-    
+
+def get_user_support_tickets(user_id):
+    with db.session() as session:
+            stmt = db.Select(SupportTicket).filter_by(user_id=user_id)
+            stmt = stmt.order_by(text('date_time desc'))
+
+            result = session.execute(stmt)
+            tickets = result.scalars().all()
+            
+            serialized_tickets = [
+                {
+                    'query_type': ticket.query_type,
+                    'query_title': ticket.query_title,
+                    'query_desc': ticket.query_desc,
+                    'query_status': ticket.query_status,
+                    'resolved_issue': ticket.resolved_issue,
+                    'date_time': ticket.date_time.strftime('%Y-%m-%d %H:%M:%S')
+                }
+                for ticket in tickets
+            ]
+            
+            count_open_stmt = (db.Select(func.count()).select_from(SupportTicket).filter_by(user_id=user_id, query_status='Open'))
+            open_count_result = session.execute(count_open_stmt)
+            open_count = open_count_result.scalar()
+            
+            count_closed_stmt = (db.Select(func.count()).select_from(SupportTicket).filter_by(user_id=user_id, query_status='Closed'))
+            closed_count_result = session.execute(count_closed_stmt)
+            closed_count = closed_count_result.scalar()
+            
+
+            total_count = open_count + closed_count
+            
+            return jsonify({
+                'transactions': serialized_tickets,
+                'open_count': open_count,
+                'closed_count': closed_count,
+                'total_count': total_count
+            })
 
 def get_withdrawal_table(user_id, page, per_page, from_date, to_date ):
     with db.session() as session:

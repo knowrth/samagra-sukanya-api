@@ -7,7 +7,7 @@ from models.UserModels import UserModel, UserTransaction,  UserBankDetails
 from models.EpinModels import  RegisterEPin
 from models.ReferencModels import  SupportTicket
 from models.decorator import user_required
-from services.user_team_service import get_transaction_summary, income_transaction_user, create_support_ticket, create_withdrawal_request, get_transactions_table, get_withdrawal_table
+from services.user_team_service import get_transaction_summary, income_transaction_user, create_support_ticket, create_withdrawal_request, get_transactions_table, get_withdrawal_table, get_user_support_tickets
 from datetime import datetime
 
 transaction = Blueprint('transaction', __name__,)
@@ -135,19 +135,21 @@ def support_ticket(user_id):
 @user_required
 def get_all_support_ticket(user_id):
     try:
-        tickets = SupportTicket.query.filter_by(user_id=user_id).order_by(desc(SupportTicket.date_time)).all()
-        serialized_tickets = [{
-            'query_type': ticket.query_type,
-            'query_title': ticket.query_title,
-            'query_desc': ticket.query_desc,
-            'query_status': ticket.query_status,
-            'resolved_issue': ticket.resolved_issue,
-            'date_time': ticket.date_time,
-        } for ticket in tickets]
-        open_count = SupportTicket.query.filter_by(query_status='Open').count()
-        closed_count = SupportTicket.query.filter_by(query_status='Closed').count()
-        total_count = SupportTicket.query.count()
-        return jsonify({'transactions': serialized_tickets, 'open_count':open_count, 'closed_count': closed_count, 'total_count': total_count }), 200
+        # tickets = SupportTicket.query.filter_by(user_id=user_id).order_by(desc(SupportTicket.date_time)).all()
+        # serialized_tickets = [{
+        #     'query_type': ticket.query_type,
+        #     'query_title': ticket.query_title,
+        #     'query_desc': ticket.query_desc,
+        #     'query_status': ticket.query_status,
+        #     'resolved_issue': ticket.resolved_issue,
+        #     'date_time': ticket.date_time,
+        # } for ticket in tickets]
+        # open_count = SupportTicket.query.filter_by(query_status='Open').count()
+        # closed_count = SupportTicket.query.filter_by(query_status='Closed').count()
+        # total_count = SupportTicket.query.count()
+        # return jsonify({'transactions': serialized_tickets, 'open_count':open_count, 'closed_count': closed_count, 'total_count': total_count }), 200
+        tickets = get_user_support_tickets(user_id)
+        return tickets
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
