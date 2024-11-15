@@ -336,25 +336,67 @@ def get_user_name(user_id):
             return user.name if user else None
     return None
 
+import logging
 
+# Setting up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def get_epin_count_by_user(user_id):
     with db.session() as session:
-        # Count used epins
-        used_count = session.query(func.count(func.distinct(EPinTransaction.epin_id))).\
-            filter(EPinTransaction.issued_to == user_id, EPinTransaction.transaction_type == 'registered').scalar()
         
-        total_count = session.query(func.count(func.distinct(EPinTransaction.epin_id))).\
-            filter(or_(EPinTransaction.issued_to == user_id, EPinTransaction.held_by == user_id)).scalar()
+        subquery = (
+            select(
+                EPinTransaction.epin_id,
+                func.max(EPinTransaction.created_at).label('latest_created_at')
+            )
+            .group_by(EPinTransaction.epin_id)
+            .subquery()
+        )
+    
+        # Main query to fetch transactions
+        transactions_stmt = (
+            select(EPinTransaction)
+            .join(subquery, and_(
+                EPinTransaction.epin_id == subquery.c.epin_id,
+                EPinTransaction.created_at == subquery.c.latest_created_at
+            ))
+            .where(
+                or_(EPinTransaction.issued_to == user_id, EPinTransaction.held_by == user_id)
+            )
+            .order_by(
+                desc(subquery.c.latest_created_at),
+                EPinTransaction.epin_id,  
+                EPinTransaction.created_at 
+            )
+        )
+        
+        transactions = session.execute(transactions_stmt).scalars().all()
+
+        transaction_ids = [transaction.epin_id for transaction in transactions]
+
+        
+        used_count = session.query(func.count(func.distinct(EPinTransaction.epin_id)))\
+            .filter(EPinTransaction.issued_to == user_id, 
+                    EPinTransaction.transaction_type == 'registered',
+                    EPinTransaction.epin_id.in_(transaction_ids))\
+            .scalar()
+
+        
+        total_count = session.query(func.count(func.distinct(EPinTransaction.epin_id)))\
+            .filter(or_(EPinTransaction.issued_to == user_id, 
+                        EPinTransaction.held_by == user_id),
+                    EPinTransaction.epin_id.in_(transaction_ids))\
+            .scalar()
         
         unused_count = total_count - used_count
         
         epin_count = {
             'used_count': used_count,
-            'unused_count': unused_count
+            'unused_count': unused_count,
         }
 
-        return epin_count
+    return epin_count
 
 
 def update_user(user_id,password=None, name=None):
@@ -378,7 +420,7 @@ def get_user_by_id(user_id):
             selected_user = dict(user)
     selected_user
 
-def get_paginated_transactions(user_id, page, per_page, from_date=None, to_date=None):
+def get_paginated_transactions(user_id, page, per_page):
     with db.session() as session:
         subquery = (
             select(
@@ -406,12 +448,6 @@ def get_paginated_transactions(user_id, page, per_page, from_date=None, to_date=
             )
         )
         
-        if from_date:
-            transactions_stmt = transactions_stmt.where(EPinTransaction.created_at >= datetime.strptime(from_date, '%Y-%m-%d'))
-        if to_date:
-            end_of_day = datetime.strptime(to_date, '%Y-%m-%d') + timedelta(days=1) - timedelta(milliseconds=1)
-            transactions_stmt = transactions_stmt.where(EPinTransaction.created_at <= end_of_day)
-        
         offset = (page - 1) * per_page
         
         # Subquery for counting total transactions
@@ -425,12 +461,6 @@ def get_paginated_transactions(user_id, page, per_page, from_date=None, to_date=
                 ))
                 .where(
                     or_(EPinTransaction.issued_to == user_id, EPinTransaction.held_by == user_id)
-                )
-                .where(
-                    EPinTransaction.created_at >= (datetime.strptime(from_date, '%Y-%m-%d') if from_date else datetime.min)
-                )
-                .where(
-                    EPinTransaction.created_at <= (end_of_day if to_date else datetime.max)
                 )
             )
         )

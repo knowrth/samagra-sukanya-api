@@ -384,7 +384,7 @@ def user_nominee(user_id):
 
 
 @user_details.route('/v1/names-and-phones', methods=['GET'])
-@user_required
+# @user_required
 def get_names_and_phones():
     try:
         phone_start = request.args.get('phone_start')

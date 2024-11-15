@@ -493,7 +493,7 @@ def get_epin_count(user_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-from sqlalchemy import desc, func, and_, select
+
 
 @epins.route('/v1/transactions/user/<user_id>', methods=['GET'])
 @user_required
@@ -536,7 +536,7 @@ def get_transactions_by_user(user_id):
         #     'total_items': paginated_transactions.total
         # }), 200
 
-        response = get_paginated_transactions(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date)
+        response = get_paginated_transactions(user_id=user_id, per_page=per_page, page=page)
         return response
 
     except Exception as e:
