@@ -98,13 +98,14 @@ def create_user_with_epin(epin, sponsor_id, phone, role, password, name="Unknown
                     status=None
                     )
                 
-                stmt = db.Select(RegisterEPin).filter_by(user_id=user.user_id).order_by(text('date_time desc'))
+                stmt = db.Select(RegisterEPin).filter(RegisterEPin.user_id == sponsors[i]).order_by(desc(RegisterEPin.date_time))
                 latest_transaction = session.execute(stmt).scalars().first()
-
+                # print('Latest Transaction', latest_transaction)
                 # latest_transaction = RegisterEPin.query.filter_by(user_id=user.user_id).order_by(desc(RegisterEPin.date_time)).first()
 
                 if latest_transaction:
                     pre_wallet = Decimal(latest_transaction.after_wallet)
+                    # print('Pre Wallet', pre_wallet)
                 else:
                     pre_wallet = Decimal(0)
 

@@ -222,6 +222,14 @@ def user_income_total(user_id):
         )
         total_transaction_amount = session.execute(total_transaction_stmt).scalar() or 0
 
+        total_reward_stmt = (
+            select(func.sum(UserTransaction.amount))
+            .filter(UserTransaction.user_id == user_id,
+                    UserTransaction.category == 'Reward')
+        )
+
+        total_reward_amount = session.execute(total_reward_stmt).scalar() or 0
+
         # total withdrawal
         total_withdrawal_stmt = (
             select(func.sum(UserTransaction.amount))
@@ -233,13 +241,14 @@ def user_income_total(user_id):
         )
         total_withdrawal_amount = session.execute(total_withdrawal_stmt).scalar() or 0
 
+        total_amount = total_reward_amount + total_transaction_amount
         # remaining amount
-        amount = total_transaction_amount - total_withdrawal_amount
+        amount = total_amount - total_withdrawal_amount
 
 
         return jsonify({
             'total_withdrawal_amount': total_withdrawal_amount,
-            'total_amount': total_transaction_amount,
+            'total_amount': total_amount,
             'amount': amount
         })
 

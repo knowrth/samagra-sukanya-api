@@ -7,7 +7,7 @@ from models.UserModels import UserModel, UserTransaction,  UserBankDetails
 from models.EpinModels import  RegisterEPin
 from models.ReferencModels import  SupportTicket
 from models.decorator import user_required
-from services.user_team_service import get_transaction_summary, income_transaction_user, create_support_ticket, create_withdrawal_request, get_transactions_table, get_withdrawal_table, get_user_support_tickets
+from services.user_team_service import get_transaction_summary, income_transaction_user, create_support_ticket, create_withdrawal_request, get_transactions_table, get_withdrawal_table, get_user_support_tickets, reward_transaction_user
 from datetime import datetime
 
 transaction = Blueprint('transaction', __name__,)
@@ -44,6 +44,22 @@ def get_income_transactions_by_user_id(user_id):
         #     .filter(RegisterEPin.user_id == user_id).scalar()
         # return jsonify({'transactions': serialized_transactions, 'total_amount': total_transaction_amount_query}), 200 
         transaction = income_transaction_user(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date)
+        if transaction:
+            return transaction
+    except Exception as e:
+        print(e)
+        return jsonify({'error': 'Internal Server Error'}), 500
+    
+@transaction.route('/v1/users/reward_transactions/<user_id>', methods=['GET'])
+@user_required
+def get_reward_transactions_by_user_id(user_id):
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        from_date = request.args.get('from_date')
+        to_date = request.args.get('to_date')
+        
+        transaction = reward_transaction_user(user_id=user_id, per_page=per_page, page=page, from_date=from_date, to_date=to_date)
         if transaction:
             return transaction
     except Exception as e:
