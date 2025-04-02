@@ -40,18 +40,18 @@ app.register_blueprint(user_details)
 @app.route('/login', methods=['POST'])
 @cross_origin()
 def login():
-    email = request.json.get('email', None)
+    phone = request.json.get('phone', None)
     password = request.json.get('password', None)
-    print(email)
-    print(password)
-    user = UserModel.query.filter_by(phone=email).first()
+    # print(email)
+    # print(password)
+    user = UserModel.query.filter_by(phone=phone).first()
 
     if user and user.verify_password(password):
         token_payload = {'user_id': str(user.user_id), 'email': user.email, 'role': user.role, 'name': user.name, 'username': user.username, 'phone': user.phone}
         access_token = jwt.encode(token_payload, 'your_secret_key', algorithm='HS256')
         return jsonify({'access_token': access_token}), 200
     else:
-        return jsonify({'error': 'Invalid email or password'}), 401
+        return jsonify({'error': 'Invalid phone or password'}), 401
 
 
 

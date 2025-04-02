@@ -11,7 +11,8 @@ from models.ReferencModels import  ResetTokenModel, IncomeLevel, SupportTicket
 from flask_mail import  Message
 from datetime import datetime
 from decimal import Decimal
-
+from services.admin_table_services import get_user_tables, get_commission_tables, get_pending_withdrawals, get_user_transaction_table, get_support_tickets, pin_package_counts, user_count, get_epins_list 
+from services.admin_create_services import approve_withdrawals, approve_support, usernames_and_phones, admin_user_password_reset, user_subscription, user_multiple_pins
 from datetime import datetime
 
 admin = Blueprint('admin', __name__,)
@@ -236,59 +237,63 @@ def send_reset_email(email, token):
 @admin_required
 def update_user_password(user_id):
     try:
-        user = UserModel.query.get(user_id)
-        if user:
-            new_password = request.json.get('password')
+        # user = UserModel.query.get(user_id)
+        # if user:
+        new_password = request.json.get('password')
 
-            user.password = new_password
+        #     user.password = new_password
 
-            if user.user_status != 'ACTIVE':
-                user.user_status = 'ACTIVE'
+        #     if user.user_status != 'ACTIVE':
+        #         user.user_status = 'ACTIVE'
 
-            db.session.commit()
-            # send_registration_password(user, new_password)
-            return jsonify({'message': 'User password updated successfully'}), 200
+        #     db.session.commit()
+        #     # send_registration_password(user, new_password)
+        #     return jsonify({'message': 'User password updated successfully'}), 200
 
-        else:
-            return jsonify({'error': 'User not found'}), 404
+        # else:
+        #     return jsonify({'error': 'User not found'}), 404
+        response = admin_user_password_reset(user_id=user_id, password=new_password)
+        return response
     except Exception as e:
         print("Error:", e)
         return jsonify({'error': 'An error occurred while updating user password'}), 500
 
 
 
-@admin.route('/admin/users/<string:user_id>/reset_password', methods=['POST'])
-@admin_required
-def admin_send_reset_password_link(user_id):
-    try:
-        user = UserModel.query.get(user_id)
-        if user:
-            if not user.email:
-                return jsonify({'error': 'User email not available. Cannot send password reset link.'}), 400
+# @admin.route('/admin/users/<string:user_id>/reset_password', methods=['POST'])
+# @admin_required
+# def admin_send_reset_password_link(user_id):
+#     try:
+#         user = UserModel.query.get(user_id)
+#         if user:
+#             if not user.email:
+#                 return jsonify({'error': 'User email not available. Cannot send password reset link.'}), 400
             
-            existing_token = ResetTokenModel.query.filter_by(user_id=user_id).first()
+#             existing_token = ResetTokenModel.query.filter_by(user_id=user_id).first()
 
-            if existing_token:
-                if existing_token.valid_till > datetime.utcnow():
-                    send_reset_email(user.email, existing_token.token)
-                    return jsonify({'message': 'Password reset link sent successfully'}), 200
-                else:
-                    db.session.delete(existing_token)
+#             if existing_token:
+#                 if existing_token.valid_till > datetime.utcnow():
+#                     send_reset_email(user.email, existing_token.token)
+#                     return jsonify({'message': 'Password reset link sent successfully'}), 200
+#                 else:
+#                     db.session.delete(existing_token)
 
-            token = hashlib.sha256(user_id.encode()).hexdigest()
+#             token = hashlib.sha256(user_id.encode()).hexdigest()
 
-            reset_token = ResetTokenModel(user_id=user_id, email=user.email, token=token)
-            db.session.add(reset_token)
-            db.session.commit()
+#             reset_token = ResetTokenModel(user_id=user_id, email=user.email, token=token)
+#             db.session.add(reset_token)
+#             db.session.commit()
 
-            send_reset_email(user.email, token)
+#             send_reset_email(user.email, token)
 
-            return jsonify({'message': 'Password reset link sent successfully'}), 200
-        else:
-            return jsonify({'error': 'User not found'}), 404
-    except Exception as e:
-        # print("Error:", e)
-        return jsonify({'error': 'An error occurred while sending password reset link'}), 500
+#             return jsonify({'message': 'Password reset link sent successfully'}), 200
+#         else:
+#             return jsonify({'error': 'User not found'}), 404
+#     except Exception as e:
+#         # print("Error:", e)
+#         return jsonify({'error': 'An error occurred while sending password reset link'}), 500
+
+
 
 # receive epin subscription
 
@@ -304,99 +309,100 @@ def admin_issue_epin():
         transaction_type = data.get('transaction_type')
         transaction_note = data.get('transaction_note')
         
-
-        if not all([user_id, amount, transaction_type]):
-            error_message = 'Missing required fields'
-            return jsonify({'error': error_message}), 400
-
-        user = UserModel.query.get(user_id)
-        if not user:
-            error_message = 'User not found'
-            return jsonify({'error': error_message}), 404
-
-        package_map = {
-            '0': 'Registered',
-            '600': 'Partial Access',
-            '1400': 'Partial Access',
-            '2000': 'Activated'
-        }
-        package = package_map.get(amount)
-        if not package:
-            error_message = 'Invalid pin type'
-            return jsonify({'error': error_message}), 400
-
-        user_amt = Decimal(amount)
-        user.amount_paid += user_amt
-        user.paid_type = transaction_type
-        if user.amount_paid >= Decimal('2000'):
-            user.paid_status = 'PAID'
-            user.user_status = 'ACTIVE'
-            user.reg_status = 'Activated'
-        else:
-            user.reg_status = package
-        db.session.commit()
-
         sponsor_info = data.get('sponsor')
+        # if not all([user_id, amount, transaction_type]):
+        #     error_message = 'Missing required fields'
+        #     return jsonify({'error': error_message}), 400
 
-        # print('Sponsor_info:', sponsor_info)
+        # user = UserModel.query.get(user_id)
+        # if not user:
+        #     error_message = 'User not found'
+        #     return jsonify({'error': error_message}), 404
 
-        sponsor_id = None
-        if sponsor_info != None :
-            try:
-                sponsor_name, sponsor_phone = map(str.strip, sponsor_info.split('-'))
-                sponsor = UserModel.query.filter_by(name=sponsor_name, phone=sponsor_phone).first()
-                if sponsor:
-                    sponsor_id = sponsor.user_id
-            except ValueError:
-                sponsor_id = None
-        else:
-            sponsor_id = None
+        # package_map = {
+        #     '0': 'Registered',
+        #     '600': 'Partial Access',
+        #     '1400': 'Partial Access',
+        #     '2000': 'Activated'
+        # }
+        # package = package_map.get(amount)
+        # if not package:
+        #     error_message = 'Invalid pin type'
+        #     return jsonify({'error': error_message}), 400
 
-        # print('Sponsor ID: %s', sponsor_id)  
+        # user_amt = Decimal(amount)
+        # user.amount_paid += user_amt
+        # user.paid_type = transaction_type
+        # if user.amount_paid >= Decimal('2000'):
+        #     user.paid_status = 'PAID'
+        #     user.user_status = 'ACTIVE'
+        #     user.reg_status = 'Activated'
+        # else:
+        #     user.reg_status = package
+        # db.session.commit()
 
-        created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+        # sponsor_info = data.get('sponsor')
 
-        payment_type = "Payment"
-        remark = f"Paid {amount} {transaction_type}, {transaction_note}"
-        new_transaction = UserTransaction(
-            user_id=user_id,
-            type=payment_type,
-            category="Activation",
-            amount=str(amount),
-            remark=remark,
-            date_time=created_at,
-            sponsor_id=sponsor_id,
-            status=None
-        )
+        # # print('Sponsor_info:', sponsor_info)
 
-        db.session.add(new_transaction)
-        db.session.commit()
+        # sponsor_id = None
+        # if sponsor_info != None :
+        #     try:
+        #         sponsor_name, sponsor_phone = map(str.strip, sponsor_info.split('-'))
+        #         sponsor = UserModel.query.filter_by(name=sponsor_name, phone=sponsor_phone).first()
+        #         if sponsor:
+        #             sponsor_id = sponsor.user_id
+        #     except ValueError:
+        #         sponsor_id = None
+        # else:
+        #     sponsor_id = None
 
-        created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+        # # print('Sponsor ID: %s', sponsor_id)  
 
-        if user.amount_paid == Decimal('2000'):
-            sponsor_transaction = UserModel.query.filter_by(user_id=user_id).first()
-            if sponsor_transaction:
-                sponsor_id = sponsor_transaction.sponsor_id
-                print(sponsor_id)
-                if sponsor_id:
-                    epin_transaction = EPinTransaction(
-                        transaction_type='generate',
-                        user_id=sponsor_id,
-                        pin_type='2000 E-pin',
-                        pin_amount= '2000.00',
-                        created_at=created_at,
-                        issued_to=sponsor_id,
-                        held_by=sponsor_id,
-                    )
+        # created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
 
-                    db.session.add(epin_transaction)
-                    db.session.commit()
+        # payment_type = "Payment"
+        # remark = f"Paid {amount} {transaction_type}, {transaction_note}"
+        # new_transaction = UserTransaction(
+        #     user_id=user_id,
+        #     type=payment_type,
+        #     category="Activation",
+        #     amount=str(amount),
+        #     remark=remark,
+        #     date_time=created_at,
+        #     sponsor_id=sponsor_id,
+        #     status=None
+        # )
 
-                else:
-                    pass
+        # db.session.add(new_transaction)
+        # db.session.commit()
 
-        return jsonify({'message': 'Epin issued successfully'}), 200
+        # created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+
+        # if user.amount_paid == Decimal('2000'):
+        #     sponsor_transaction = UserModel.query.filter_by(user_id=user_id).first()
+        #     if sponsor_transaction:
+        #         sponsor_id = sponsor_transaction.sponsor_id
+        #         print(sponsor_id)
+        #         if sponsor_id:
+        #             epin_transaction = EPinTransaction(
+        #                 transaction_type='generate',
+        #                 user_id=sponsor_id,
+        #                 pin_type='2000 E-pin',
+        #                 pin_amount= '2000.00',
+        #                 created_at=created_at,
+        #                 issued_to=sponsor_id,
+        #                 held_by=sponsor_id,
+        #             )
+
+        #             db.session.add(epin_transaction)
+        #             db.session.commit()
+
+        #         else:
+        #             pass
+        response = user_subscription(pin_type=amount, user_id=user_id, transaction_type=transaction_type, sponsor=sponsor_info, transaction_note=transaction_note)
+        return response
+        # return jsonify({'message': 'Epin issued successfully'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -412,67 +418,69 @@ def pay_amount():
     amount_str = data.get('amount')
     count_value = data.get('count')
     
-    if not all([name, phone, amount_str, count_value]):
-        return jsonify({'error': 'Missing required data (name, phone, amount, count)'}), 400
+    # if not all([name, phone, amount_str, count_value]):
+    #     return jsonify({'error': 'Missing required data (name, phone, amount, count)'}), 400
     
-    if amount_str is not None:
-        amount = Decimal(amount_str)
+    # if amount_str is not None:
+    #     amount = Decimal(amount_str)
     
-    if count_value is not None:
-        count = int(count_value)
+    # if count_value is not None:
+    #     count = int(count_value)
     
-    created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
-    user = UserModel.query.filter_by(name=name, phone=phone).first()
+    # created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+    # user = UserModel.query.filter_by(name=name, phone=phone).first()
     
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
+    # if not user:
+    #     return jsonify({'error': 'User not found'}), 404
     
-    user_id = user.user_id 
+    # user_id = user.user_id 
     
     try:
-        for i in range(count):
-            transaction_type = "Payment"
-            remark = f"Paid {amount} "
-            # print(i)
-            # print(count)
-            new_transaction = UserTransaction(
-                user_id=user_id,
-                type=transaction_type,
-                category="Kit Purchase",
-                amount=str(amount),
-                remark=remark,
-                sponsor_id=user_id,
-                date_time=created_at,
-                status=None
-            )
+    #     for i in range(count):
+    #         transaction_type = "Payment"
+    #         remark = f"Paid {amount} "
+    #         # print(i)
+    #         # print(count)
+    #         new_transaction = UserTransaction(
+    #             user_id=user_id,
+    #             type=transaction_type,
+    #             category="Kit Purchase",
+    #             amount=str(amount),
+    #             remark=remark,
+    #             sponsor_id=user_id,
+    #             date_time=created_at,
+    #             status=None
+    #         )
             
-            db.session.add(new_transaction)
+    #         db.session.add(new_transaction)
         
-            if amount == Decimal('0.00'):
-                epin_transaction = EPinTransaction(
-                    transaction_type='generate',
-                    user_id=user_id,
-                    pin_type='0 E-pin',
-                    pin_amount='0.00',
-                    created_at=created_at,
-                    issued_to=user_id,
-                    held_by=user_id,
-                )
-            else:
-                epin_transaction = EPinTransaction(
-                    transaction_type='generate',
-                    user_id=user_id,
-                    pin_type='500 E-pin',
-                    pin_amount='500.00',
-                    created_at=created_at,
-                    issued_to=user_id,
-                    held_by=user_id,
-                )
+    #         if amount == Decimal('0.00'):
+    #             epin_transaction = EPinTransaction(
+    #                 transaction_type='generate',
+    #                 user_id=user_id,
+    #                 pin_type='0 E-pin',
+    #                 pin_amount='0.00',
+    #                 created_at=created_at,
+    #                 issued_to=user_id,
+    #                 held_by=user_id,
+    #             )
+    #         else:
+    #             epin_transaction = EPinTransaction(
+    #                 transaction_type='generate',
+    #                 user_id=user_id,
+    #                 pin_type='500 E-pin',
+    #                 pin_amount='500.00',
+    #                 created_at=created_at,
+    #                 issued_to=user_id,
+    #                 held_by=user_id,
+    #             )
             
-            db.session.add(epin_transaction)
-            db.session.commit()
+    #         db.session.add(epin_transaction)
+    #         db.session.commit()
             
-        return jsonify({'message': 'Amount paid successfully'}), 200
+        # return jsonify({'message': 'Amount paid successfully'}), 200
+        response = user_multiple_pins(amount_str=amount_str, count_value=count_value, name=name, phone=phone )
+        return response
     
     except Exception as e:
         db.session.rollback()
@@ -488,35 +496,35 @@ def get_all_transactions_with_user_email():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
 
-        transactions = db.session.query(
-            RegisterEPin,
-            UserModel.username,
-            UserModel.name
-        ).join(
-            UserModel,
-            RegisterEPin.user_id == UserModel.user_id
-        ).order_by(desc(RegisterEPin.date_time))
+        offset = (page - 1) * per_page
 
-        paginated_transactions = transactions.paginate(page=page, per_page=per_page)
+        commission = get_commission_tables(limit=per_page, 
+            offset=offset, )
 
-        transaction_data = [{
-            'user_email': username,
-            'name': name,
-            'amount': transaction.commission,
-            'pre_wallet_amount': transaction.pre_wallet,
-            'after_wallet_amount': transaction.after_wallet,
-            'transaction_mode_type': transaction.trans_type,
-            'logType': transaction.log_type,
-            'transaction_note': transaction.trans_note,
-            'timestamp': transaction.date_time.strftime('%Y-%m-%d %H:%M:%S'),
-        } for transaction, username, name in paginated_transactions.items]
-        print(paginated_transactions.pages)
-        return jsonify({
-            'transactions': transaction_data,
-            'total_pages': paginated_transactions.pages,
-            'current_page': paginated_transactions.page,
-            'total_transactions': paginated_transactions.total
-        }), 200
+        # transactions = db.session.query(
+        #     RegisterEPin,
+        #     UserModel.username,
+        #     UserModel.name
+        # ).join(
+        #     UserModel,
+        #     RegisterEPin.user_id == UserModel.user_id
+        # ).order_by(desc(RegisterEPin.date_time))
+
+        # paginated_transactions = transactions.paginate(page=page, per_page=per_page)
+
+        # transaction_data = [{
+        #     'user_email': username,
+        #     'name': name,
+        #     'amount': transaction.commission,
+        #     'pre_wallet_amount': transaction.pre_wallet,
+        #     'after_wallet_amount': transaction.after_wallet,
+        #     'transaction_mode_type': transaction.trans_type,
+        #     'logType': transaction.log_type,
+        #     'transaction_note': transaction.trans_note,
+        #     'timestamp': transaction.date_time.strftime('%Y-%m-%d %H:%M:%S'),
+        # } for transaction, username, name in paginated_transactions.items]
+        # print(paginated_transactions.pages)
+        return commission, 200
 
     except Exception as e:
         print("Error:", e)
@@ -532,16 +540,19 @@ def get_usernames_and_phones():
         page = request.args.get('page', 1, type=int)
         per_page = 10
 
-        users = UserModel.query.paginate(page=page, per_page=per_page, error_out=False)
+        # users = UserModel.query.paginate(page=page, per_page=per_page, error_out=False)
 
 
-        data = [f"{user.name} - {user.phone}" for user in users]
+        # data = [f"{user.name} - {user.phone}" for user in users]
 
-        return jsonify({
-            'users': data,
-            'total_pages': users.pages,
-            'current_page': page
-        }), 200
+        # return jsonify({
+        #     'users': data,
+        #     'total_pages': users.pages,
+        #     'current_page': page
+        # }), 200
+
+        response = usernames_and_phones(per_page=per_page, page=page)
+        return response
 
     except Exception as e:
         print(e)
@@ -550,57 +561,69 @@ def get_usernames_and_phones():
 
 
 
-from sqlalchemy import or_
 # user table 
 
 @admin.route('/v1/users', methods=['GET'])
 @admin_required
 def get_all_users():
     try:
+        # Get query parameters for pagination and search
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
         search_term = request.args.get('search', None, type=str)
 
-        # Query users with optional search filter
-        query = UserModel.query
+        # Calculate offset for pagination
+        offset = (page - 1) * per_page
 
+        # Prepare filter_by and order_by parameters
+        filter_by = {}
         if search_term:
-            # Filter by name or phone containing the search term
-            query = query.filter(
-                or_(
-                    UserModel.name.ilike(f'%{search_term}%'),
-                    UserModel.phone.ilike(f'%{search_term}%')
-                )
-            )
-
-        # Paginate the filtered query
-        users_paginated = query.order_by(UserModel.user_id.asc()).paginate(
-            page=page, per_page=per_page, error_out=False)
-
-        user_list = []
-        for user in users_paginated.items:
-            user_data = {
-                'user_id': user.user_id,
-                'email': user.email,
-                'role': user.role,
-                'name': user.name,
-                'phone': user.phone,
-                'paid_status': user.paid_status,
-                'username': user.username,
-                'amount_paid': user.amount_paid
+            filter_by = {
+                'name': search_term,
+                'phone': search_term
             }
-            user_list.append(user_data)
+            print('filter_term', search_term)
+        # Fetch users with list_user
+        user_data = get_user_tables(
+            filter_by=filter_by, 
+            limit=per_page, 
+            offset=offset, 
+            order_by=['user_id']
+        )
 
-        return jsonify({
-            'users': user_list,
-            'total_users': users_paginated.total,
-            'current_page': users_paginated.page,
-            'total_pages': users_paginated.pages
-        }), 200
+        # Return the response
+        return user_data, 200
     
     except Exception as e:
         print("An error occurred:", e)  # Print the error
         return jsonify({'error': 'An error occurred. Please try again later.'}), 500
+        # Paginate the filtered query
+        # users_paginated = query.order_by(UserModel.user_id.asc()).paginate(
+        #     page=page, per_page=per_page, error_out=False)
+
+        # user_list = []
+        # for user in users_paginated.items:
+        #     user_data = {
+        #         'user_id': user.user_id,
+        #         'email': user.email,
+        #         'role': user.role,
+        #         'name': user.name,
+        #         'phone': user.phone,
+        #         'paid_status': user.paid_status,
+        #         'username': user.username,
+        #         'amount_paid': user.amount_paid
+        #     }
+        #     user_list.append(user_data)
+
+            
+        # return jsonify({
+        #     'users': user_list,
+        #     'total_users': users_paginated.total,
+        #     'current_page': users_paginated.page,
+        #     'total_pages': users_paginated.pages
+        # }), 200
+    
+    
 
 
 # pin table
@@ -613,32 +636,34 @@ def get_latest_transactions():
         per_page = request.args.get('per_page', 10, type=int)
 
         # Subquery to get the latest created_at for each epin_id
-        subquery = db.session.query(
-            EPinTransaction.epin_id,
-            func.max(EPinTransaction.created_at).label('latest_created_at')
-        ).group_by(EPinTransaction.epin_id).\
-            order_by(desc(func.max(EPinTransaction.created_at))).subquery()
+        # subquery = db.session.query(
+        #     EPinTransaction.epin_id,
+        #     func.max(EPinTransaction.created_at).label('latest_created_at')
+        # ).group_by(EPinTransaction.epin_id).\
+        #     order_by(desc(func.max(EPinTransaction.created_at))).subquery()
 
-        # Main query to fetch EPinTransaction records joined with the latest created_at
-        transactions_query = db.session.query(EPinTransaction).\
-            join(subquery, and_(
-                EPinTransaction.epin_id == subquery.c.epin_id,
-                EPinTransaction.created_at == subquery.c.latest_created_at
-            )).order_by(desc(subquery.c.latest_created_at))
+        # # Main query to fetch EPinTransaction records joined with the latest created_at
+        # transactions_query = db.session.query(EPinTransaction).\
+        #     join(subquery, and_(
+        #         EPinTransaction.epin_id == subquery.c.epin_id,
+        #         EPinTransaction.created_at == subquery.c.latest_created_at
+        #     )).order_by(desc(subquery.c.latest_created_at))
 
-        # Paginate the results
-        paginated_transactions = transactions_query.paginate(page=page, per_page=per_page, error_out=False)
+        # # Paginate the results
+        # paginated_transactions = transactions_query.paginate(page=page, per_page=per_page, error_out=False)
 
-        # Serialize each transaction into a dictionary
-        serialized_transactions = [transaction.serialize() for transaction in paginated_transactions.items]
+        # # Serialize each transaction into a dictionary
+        # serialized_transactions = [transaction.serialize() for transaction in paginated_transactions.items]
 
-        # Return paginated results as JSON response
-        return jsonify({
-            'transactions': serialized_transactions,
-            'total_transactions': paginated_transactions.total,
-            'current_page': paginated_transactions.page,
-            'total_pages': paginated_transactions.pages
-        }), 200
+        # # Return paginated results as JSON response
+        # return jsonify({
+        #     'transactions': serialized_transactions,
+        #     'total_transactions': paginated_transactions.total,
+        #     'current_page': paginated_transactions.page,
+        #     'total_pages': paginated_transactions.pages
+        # }), 200
+        response = get_epins_list(per_page=per_page, page=page)
+        return response
     
     except Exception as e:
         print(e)
@@ -652,37 +677,39 @@ def get_user_withdrawal():
         page = request.args.get('page', default=1, type=int)
         per_page = request.args.get('per_page', default=10, type=int)
 
-        user_transactions = UserTransaction.query.filter_by(status="Pending").paginate(page=page, per_page=per_page, error_out=False)
+        # user_transactions = UserTransaction.query.filter_by(status="Pending").paginate(page=page, per_page=per_page, error_out=False)
 
-        if user_transactions.items:
-            withdrawals = []
-            for transaction in user_transactions.items:
-                user = UserModel.query.filter_by(user_id=transaction.user_id).first()
-                if user:
-                    # date_time_ist = transaction.date_time.astimezone(pytz.timezone('Asia/Kolkata'))
+        # if user_transactions.items:
+        #     withdrawals = []
+        #     for transaction in user_transactions.items:
+        #         user = UserModel.query.filter_by(user_id=transaction.user_id).first()
+        #         if user:
+        #             # date_time_ist = transaction.date_time.astimezone(pytz.timezone('Asia/Kolkata'))
                     
-                    withdrawal = {
-                        'user_id': user.user_id,
-                        'name': user.name,
-                        'username': user.username,
-                        'phone': user.phone,
-                        'amount': transaction.amount,
-                        'remark': transaction.remark,
-                        'date_time': transaction.date_time,  # Format datetime as string
-                    }
-                    withdrawals.append(withdrawal)
-                else:
-                    return jsonify({'error': 'User not found'}), 404
+        #             withdrawal = {
+        #                 'user_id': user.user_id,
+        #                 'name': user.name,
+        #                 'username': user.username,
+        #                 'phone': user.phone,
+        #                 'amount': transaction.amount,
+        #                 'remark': transaction.remark,
+        #                 'date_time': transaction.date_time,  # Format datetime as string
+        #             }
+        #             withdrawals.append(withdrawal)
+        #         else:
+        #             return jsonify({'error': 'User not found'}), 404
             
-            return jsonify({
-                'withdrawals': withdrawals,
-                'total_pages': user_transactions.pages,
-                'current_page': user_transactions.page,
-                'total_withdrawals': user_transactions.total
-            }), 200
+        #     return jsonify({
+        #         'withdrawals': withdrawals,
+        #         'total_pages': user_transactions.pages,
+        #         'current_page': user_transactions.page,
+        #         'total_withdrawals': user_transactions.total
+        #     }), 200
 
-        else:
-            return jsonify({'success': 'No withdrawal requests found'}), 200
+        # else:
+        #     return jsonify({'success': 'No withdrawal requests found'}), 200
+        withdrawal = get_pending_withdrawals(page=page, per_page=per_page)
+        return withdrawal
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -697,21 +724,31 @@ def user_withdrawal(user_id):
     created_at = data.get('created_at')
     remarkAdmin = data.get('remark')
     # print(created_at)
-    user_transaction = UserTransaction.query.filter_by(user_id=user_id, amount=amount, date_time=created_at, status="Pending").first()
-    print('transaction', user_transaction)
-    if user_transaction:
-        # transaction_type = "Debit"
-        if remarkAdmin:
-            remark = f"Withdrawal amount {amount}, {remarkAdmin} "
-        else:
-            remark = f"Withdrawal amount {amount}"
+    # user_transaction = UserTransaction.query.filter_by(user_id=user_id, amount=amount, date_time=created_at, status="Pending").first()
+    # print('transaction', user_transaction)
+    # if user_transaction:
+    #     # transaction_type = "Debit"
+    #     if remarkAdmin:
+    #         remark = f"Withdrawal amount {amount}, {remarkAdmin} "
+    #     else:
+    #         remark = f"Withdrawal amount {amount}"
 
-        # db.session.delete(user_transaction)
-        created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
-        user_transaction.status = "Approved",
-        user_transaction.remark = remark,
-        user_transaction.date_time = created_at,
-        # Create a new transaction
+    #     # db.session.delete(user_transaction)
+    #     created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+    #     user_transaction.status = "Approved",
+    #     user_transaction.remark = remark,
+    #     user_transaction.date_time = created_at,
+    
+    #     db.session.commit()
+
+    #     return jsonify({'message': 'Withdrawal successful'})
+    response = approve_withdrawals(amount=amount, created_at=created_at, user_id=user_id, remark_admin=remarkAdmin)
+    if response:
+        return response
+    else:
+        return jsonify({'error': 'User transaction not found'}), 404
+
+ # Create a new transaction
         # new_transaction = UserTransaction(
         #     user_id=user_id,
         #     type=transaction_type,
@@ -725,13 +762,6 @@ def user_withdrawal(user_id):
 
         # Commit the changes
         # db.session.add(new_transaction)
-        db.session.commit()
-
-        return jsonify({'message': 'Withdrawal successful'})
-
-    else:
-        return jsonify({'error': 'User transaction not found'}), 404
-
 
 # user transaction table
 
@@ -739,22 +769,24 @@ def user_withdrawal(user_id):
 @admin_required
 def get_user_transactions(user_id):
     try:
-        user_transactions = UserTransaction.query.filter_by(user_id=user_id).filter(UserTransaction.category != 'Commission').all()
+        # user_transactions = UserTransaction.query.filter_by(user_id=user_id).filter(UserTransaction.category != 'Commission').all()
 
-        if user_transactions:
-            transactions = [{
-                'id': transaction.id,
-                'type': transaction.type,
-                'category': transaction.category,
-                'amount': transaction.amount,
-                'remark': transaction.remark,
-                'date_time': transaction.date_time,
-                'sponsor_id': transaction.sponsor_id
-            } for transaction in user_transactions]
+        # if user_transactions:
+        #     transactions = [{
+        #         'id': transaction.id,
+        #         'type': transaction.type,
+        #         'category': transaction.category,
+        #         'amount': transaction.amount,
+        #         'remark': transaction.remark,
+        #         'date_time': transaction.date_time,
+        #         'sponsor_id': transaction.sponsor_id
+        #     } for transaction in user_transactions]
             
-            return jsonify({'transactions': transactions}), 200
-        else:
-            return jsonify({'message': 'No transactions found for the user'}), 404
+        #     return jsonify({'transactions': transactions}), 200
+        # else:
+        #     return jsonify({'message': 'No transactions found for the user'}), 404
+        transaction = get_user_transaction_table(user_id)
+        return transaction
     
     except Exception as e:
         print('Error in get_user_transactions: %s', str(e))
@@ -771,35 +803,39 @@ def get_user_support():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 10, type=int)
 
-        user_support = SupportTicket.query.filter_by(query_status="Open") \
-                        .paginate(page=page, per_page=per_page, error_out=False)
+        # user_support = SupportTicket.query.filter_by(query_status="Open") \
+        #                 .paginate(page=page, per_page=per_page, error_out=False)
 
-        supports = []
+        # supports = []
 
-        for support in user_support.items:
-            user = UserModel.query.filter_by(user_id=support.user_id).first()
-            if user:
-                ticket = {
-                    'user_id': user.user_id,
-                    'name': user.name,
-                    'username': user.username,
-                    'phone': user.phone,
-                    'query_type': support.query_type,
-                    'query_title': support.query_title,
-                    'query_desc': support.query_desc,
-                    'query_status': support.query_status,
-                    'date_time': support.date_time.strftime('%Y-%m-%d %H:%M:%S.%f'),  
-                }
-                supports.append(ticket)
-            else:
-                return jsonify({'error': 'User not found'}), 404
+        # for support in user_support.items:
+        #     user = UserModel.query.filter_by(user_id=support.user_id).first()
+        #     if user:
+        #         ticket = {
+        #             'user_id': user.user_id,
+        #             'name': user.name,
+        #             'username': user.username,
+        #             'phone': user.phone,
+        #             'query_type': support.query_type,
+        #             'query_title': support.query_title,
+        #             'query_desc': support.query_desc,
+        #             'query_status': support.query_status,
+        #             'date_time': support.date_time.strftime('%Y-%m-%d %H:%M:%S.%f'),  
+        #         }
+        #         supports.append(ticket)
+        #     else:
+        #         return jsonify({'error': 'User not found'}), 404
         
-        return jsonify({
-            'supports': supports,
-            'total_pages': user_support.pages,
-            'current_page': user_support.page,
-            'total_supports': user_support.total
-        }), 200
+        # return jsonify({
+        #     'supports': supports,
+        #     'total_pages': user_support.pages,
+        #     'current_page': user_support.page,
+        #     'total_supports': user_support.total
+        # }), 200
+
+        support = get_support_tickets(page=page, per_page=per_page)
+        if support:
+            return support
 
     except Exception as e:
         print("Error:", e)
@@ -815,17 +851,20 @@ def resolve_user_support(user_id):
     resolved_issue = data.get('resolved_issue')
     created_at = data.get('created_at')
     # remarkAdmin = data.get('remark')
-    user_support = SupportTicket.query.filter_by(user_id=user_id, date_time=created_at).first()
+    # user_support = SupportTicket.query.filter_by(user_id=user_id, date_time=created_at).first()
 
-    if user_support:
-        # created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
-        # user_support.date_time = created_at,
-        user_support.query_status = "Closed",
-        user_support.resolved_issue = resolved_issue,
-        db.session.commit()
+    # if user_support:
+    #     # created_at = datetime.now(pytz.timezone('Asia/Kolkata'))
+    #     # user_support.date_time = created_at,
+    #     user_support.query_status = "Closed",
+    #     user_support.resolved_issue = resolved_issue,
+    #     db.session.commit()
 
-        return jsonify({'message': 'Ticket closed successful'})
-    
+    #     return jsonify({'message': 'Ticket closed successful'})
+
+    response = approve_support(resolved_issue=resolved_issue, user_id=user_id, created_at=created_at)
+    if response:
+        return response
     else:
         return jsonify({'error': 'Support ticket not found'}), 404
         
@@ -842,70 +881,73 @@ def resolve_user_support(user_id):
 
 def get_user_counts():
     try:
-        total_count = UserModel.query.count()
-        paid_count = UserModel.query.filter_by(paid_status='PAID').count()
-        unpaid_count = UserModel.query.filter_by(paid_status='UNPAID').count()
+        # total_count = UserModel.query.count()
+        # paid_count = UserModel.query.filter_by(paid_status='PAID').count()
+        # unpaid_count = UserModel.query.filter_by(paid_status='UNPAID').count()
 
-        response = {
-            'total_count': total_count,
-            'paid_count': paid_count,
-            'unpaid_count': unpaid_count
-        }
-        return jsonify(response), 200
+        # response = {
+        #     'total_count': total_count,
+        #     'paid_count': paid_count,
+        #     'unpaid_count': unpaid_count
+        # }
+        # return jsonify(response), 200/
+        response = user_count()
+        return response
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     
 
-@admin.route('/v2/pin_counts', methods=['GET'])
-@admin_required
+# @admin.route('/v2/pin_counts', methods=['GET'])
+# @admin_required
 
-def pin_counts():
-    try:
-        unique_pins = db.session.query(EPinTransaction.pin).distinct().all()
-        total_unique_pins = len(unique_pins)
+# def pin_counts():
+#     try:
+#         unique_pins = db.session.query(EPinTransaction.pin).distinct().all()
+#         total_unique_pins = len(unique_pins)
 
-        used_pins = db.session.query(EPinTransaction.pin).filter(EPinTransaction.used_by.isnot(None)).distinct().all()
-        used_pins_count = len(used_pins)
+#         used_pins = db.session.query(EPinTransaction.pin).filter(EPinTransaction.used_by.isnot(None)).distinct().all()
+#         used_pins_count = len(used_pins)
 
-        unused_pins_count = total_unique_pins - used_pins_count
+#         unused_pins_count = total_unique_pins - used_pins_count
 
-        return jsonify({
-            'total_unique_pins': total_unique_pins,
-            'used_pins': used_pins_count,
-            'unused_pins': unused_pins_count
-        }), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+#         return jsonify({
+#             'total_unique_pins': total_unique_pins,
+#             'used_pins': used_pins_count,
+#             'unused_pins': unused_pins_count
+#         }), 200
+#     except Exception as e:
+#         return jsonify({'error': str(e)}), 500
     
 @admin.route('/v2/package_counts', methods=['GET'])
 @admin_required
-
 def package_counts():
     try:
         # Count unique pins for user package and their used and unused counts
-        user_package_pins_count = db.session.query(EPinTransaction.pin).filter_by(pin_type='500 E-pin').distinct().count()
-        user_package_used_count = db.session.query(EPinTransaction).filter(EPinTransaction.pin_type == '500 E-pin', EPinTransaction.used_by.isnot(None)).count()
-        user_package_unused_count = user_package_pins_count - user_package_used_count
+        # user_package_pins_count = db.session.query(EPinTransaction.pin).filter_by(pin_type='500 E-pin').distinct().count()
+        # user_package_used_count = db.session.query(EPinTransaction).filter(EPinTransaction.pin_type == '500 E-pin', EPinTransaction.used_by.isnot(None)).count()
+        # user_package_unused_count = user_package_pins_count - user_package_used_count
 
-        # Count unique pins for registration package and their used and unused counts
-        registration_package_pins_count = db.session.query(EPinTransaction.pin).filter_by(pin_type='0 E-pin').distinct().count()
-        registration_package_used_count = db.session.query(EPinTransaction).filter(EPinTransaction.pin_type == '0 E-pin', EPinTransaction.used_by.isnot(None)).count()
-        registration_package_unused_count = registration_package_pins_count - registration_package_used_count
+        # # Count unique pins for registration package and their used and unused counts
+        # registration_package_pins_count = db.session.query(EPinTransaction.pin).filter_by(pin_type='0 E-pin').distinct().count()
+        # registration_package_used_count = db.session.query(EPinTransaction).filter(EPinTransaction.pin_type == '0 E-pin', EPinTransaction.used_by.isnot(None)).count()
+        # registration_package_unused_count = registration_package_pins_count - registration_package_used_count
 
-        registration_2000_pins_count = db.session.query(EPinTransaction.pin).filter_by(pin_type='2000 E-pin').distinct().count()
-        registration_2000_used_count = db.session.query(EPinTransaction).filter(EPinTransaction.pin_type == '2000 E-pin', EPinTransaction.used_by.isnot(None)).count()
-        registration_2000_unused_count = registration_2000_pins_count - registration_2000_used_count
+        # registration_2000_pins_count = db.session.query(EPinTransaction.pin).filter_by(pin_type='2000 E-pin').distinct().count()
+        # registration_2000_used_count = db.session.query(EPinTransaction).filter(EPinTransaction.pin_type == '2000 E-pin', EPinTransaction.used_by.isnot(None)).count()
+        # registration_2000_unused_count = registration_2000_pins_count - registration_2000_used_count
 
-        return jsonify({
-            'user_package_pins': user_package_pins_count,
-            'user_package_used': user_package_used_count,
-            'user_package_unused': user_package_unused_count,
-            'registration_package_pins': registration_package_pins_count,
-            'registration_package_used': registration_package_used_count,
-            'registration_package_unused': registration_package_unused_count,
-            'registration_2000_pins': registration_2000_pins_count,
-            'registration_2000_used': registration_2000_used_count,
-            'registration_2000_unused': registration_2000_unused_count
-        }), 200
+        # return jsonify({
+        #     'user_package_pins': user_package_pins_count,
+        #     'user_package_used': user_package_used_count,
+        #     'user_package_unused': user_package_unused_count,
+        #     'registration_package_pins': registration_package_pins_count,
+        #     'registration_package_used': registration_package_used_count,
+        #     'registration_package_unused': registration_package_unused_count,
+        #     'registration_2000_pins': registration_2000_pins_count,
+        #     'registration_2000_used': registration_2000_used_count,
+        #     'registration_2000_unused': registration_2000_unused_count
+        # }), 200
+        package_count = pin_package_counts()
+        return package_count
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -8,6 +8,8 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy import URL
 from flask_mail import Mail
+from sqlalchemy_serializer import SerializerMixin
+
 # from flask_jwt_extended import JWTManager
 
 app = Flask(__name__, static_folder='static')
@@ -15,6 +17,7 @@ app = Flask(__name__, static_folder='static')
 dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
+
 
 
 DB_URL = URL.create(
@@ -70,3 +73,7 @@ mail = Mail(app)
 
 # from models.UserModels import UserModel
 # from models.EpinModels import RegisterEPin
+
+
+class BaseModel(db.Model, SerializerMixin):
+    __abstract__ = True

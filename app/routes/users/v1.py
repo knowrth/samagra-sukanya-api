@@ -7,7 +7,7 @@ import hashlib
 from models.UserModels import UserModel, UserTransaction, UserMap
 from models.EpinModels import RegisterEPin
 from models.ReferencModels import  ResetTokenModel
-from routes.admin.v1 import  send_reset_email
+from services.user_details_service import get_user_status, reset_password, user_sponsor, user_income_total, get_sponsor_stats
 from models.decorator import user_required
 
 from datetime import datetime
@@ -26,26 +26,26 @@ from sqlalchemy.exc import SQLAlchemyError, InvalidRequestError
 @user_required
 def get_transactions_amount_by_user_id(user_id):
     try:
+        user = user_income_total(user_id)
+        # total_transaction_amount_query = db.session.query(func.sum(RegisterEPin.commission)) \
+        #     .filter(RegisterEPin.user_id == user_id)
 
-        total_transaction_amount_query = db.session.query(func.sum(RegisterEPin.commission)) \
-            .filter(RegisterEPin.user_id == user_id)
+        # total_transaction_amount = total_transaction_amount_query.scalar() or 0
 
-        total_transaction_amount = total_transaction_amount_query.scalar() or 0
+        # total_withdrawal_amount_query = db.session.query(func.sum(UserTransaction.amount)) \
+        #     .filter(UserTransaction.user_id == user_id,
+        #             UserTransaction.category == 'Withdrawals',
+        #             UserTransaction.type == 'Debit')
+        # # print('total',total_withdrawal_amount_query)
 
-        total_withdrawal_amount_query = db.session.query(func.sum(UserTransaction.amount)) \
-            .filter(UserTransaction.user_id == user_id,
-                    UserTransaction.category == 'Withdrawals',
-                    UserTransaction.type == 'Debit')
-        # print('total',total_withdrawal_amount_query)
-
-        total_withdrawal_amount = total_withdrawal_amount_query.scalar() or 0
+        # total_withdrawal_amount = total_withdrawal_amount_query.scalar() or 0
         
-        amount = total_transaction_amount - total_withdrawal_amount
+        # amount = total_transaction_amount - total_withdrawal_amount
 
-        return jsonify({'total_withdrawal_amount': total_withdrawal_amount,
-                        'total_amount': total_transaction_amount,
-                        'amount': amount}), 200
-
+        # return jsonify({'total_withdrawal_amount': total_withdrawal_amount,
+        #                 'total_amount': total_transaction_amount,
+        #                 'amount': amount}), 200
+        return user, 200
     except (SQLAlchemyError, InvalidRequestError) as e:
         # print('error', e)
         return jsonify({'error': 'Internal Server Error'}), 500
@@ -57,22 +57,24 @@ def get_transactions_amount_by_user_id(user_id):
 @user_required
 def get_user_sponsor(user_id):
     try:
-        user = UserModel.query.filter_by(user_id=user_id).first()
-        if user:
-            sponsor_id = user.sponsor_id
-            if sponsor_id:
-                sponsor = UserModel.query.filter_by(user_id=sponsor_id).first()
-                return jsonify({
-                    'name': sponsor.name,
-                    'phone': sponsor.phone,
-                    'userName': sponsor.username,
-                }), 200
-            else:
-                return jsonify({}), 200 
+        # user = UserModel.query.filter_by(user_id=user_id).first()
+        # if user:
+        #     sponsor_id = user.sponsor_id
+        #     if sponsor_id:
+        #         sponsor = UserModel.query.filter_by(user_id=sponsor_id).first()
+        #         return jsonify({
+        #             'name': sponsor.name,
+        #             'phone': sponsor.phone,
+        #             'userName': sponsor.username,
+        #         }), 200
+        #     else:
+        #         return jsonify({}), 200 
             
-        else:
-            return jsonify({'error': 'User not found'}), 404
+        # else:
+        #     return jsonify({'error': 'User not found'}), 404
         
+        user = user_sponsor(user_id)
+        return user, 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -95,41 +97,44 @@ def get_team_count(user_id):
     #      .all()
 
     try:
-        results = db.session.query(
-    func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
-    func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', '')),
-    func.count(UserMap.user_id).label('sponsor_count'),
-    UserMap.sponsor_id,
-    func.sum(case((UserModel.paid_status == 'PAID', 1), else_=0)).label('paid_count'),
-    func.sum(case((UserModel.paid_status != 'PAID', 1), else_=0)).label('unpaid_count'),
-).select_from(UserMap).join(UserModel, UserModel.user_id == UserMap.user_id).filter(
-    UserMap.path.like(f'%{user_id}|%')
-).group_by(
-    func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
-    func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', '')),
-    UserMap.sponsor_id
-).order_by(
-    func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
-    func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', ''))
-).all()
+#         results = db.session.query(
+#     func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
+#     func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', '')),
+#     func.count(UserMap.user_id).label('sponsor_count'),
+#     UserMap.sponsor_id,
+#     func.sum(case((UserModel.paid_status == 'PAID', 1), else_=0)).label('paid_count'),
+#     func.sum(case((UserModel.paid_status != 'PAID', 1), else_=0)).label('unpaid_count'),
+# ).select_from(UserMap).join(UserModel, UserModel.user_id == UserMap.user_id).filter(
+#     UserMap.path.like(f'%{user_id}|%')
+# ).group_by(
+#     func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
+#     func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', '')),
+#     UserMap.sponsor_id
+# ).order_by(
+#     func.length(func.substring(UserMap.path, func.strpos(UserMap.path, user_id))) - 
+#     func.length(func.replace(func.substring(UserMap.path, func.strpos(UserMap.path, user_id)), '|', ''))
+# ).all()
 
-        total_results = {}
-        for row in results:
-            pipe_count = min(row[0], 9)
-            if pipe_count in total_results:
-                total_results[pipe_count]['sponsor_count'] += row[1]
-                total_results[pipe_count]['paid_count'] += row[3]
-                total_results[pipe_count]['unpaid_count'] += row[4]
-            else:
-                total_results[pipe_count] = {
-                    'Level': pipe_count,
-                    'sponsor_count': row[1],
-                    'paid_count': row[3],
-                    'unpaid_count': row[4],
-                }
+#         total_results = {}
+#         for row in results:
+#             pipe_count = min(row[0], 9)
+#             if pipe_count in total_results:
+#                 total_results[pipe_count]['sponsor_count'] += row[1]
+#                 total_results[pipe_count]['paid_count'] += row[3]
+#                 total_results[pipe_count]['unpaid_count'] += row[4]
+#             else:
+#                 total_results[pipe_count] = {
+#                     'Level': pipe_count,
+#                     'sponsor_count': row[1],
+#                     'paid_count': row[3],
+#                     'unpaid_count': row[4],
+#                 }
 
-        data = list(total_results.values())
-        return jsonify(data), 200
+#         data = list(total_results.values())
+#         return jsonify(data), 200
+
+        response = get_sponsor_stats(user_id)
+        return response
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -147,11 +152,13 @@ def update_password(user_id):
 
         new_password = request.json.get('password')
 
-        user = UserModel.query.get(user_id)
-        user.password = new_password
-        db.session.commit()
+        # user = UserModel.query.get(user_id)
+        # user.password = new_password
+        # db.session.commit()
 
-        return jsonify({'message': 'Password updated successfully'}), 200
+        user = reset_password(user_id=user_id, new_password=new_password)
+
+        return user, 200
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -214,45 +221,46 @@ def update_password(user_id):
 #     except Exception as e:
 #         return jsonify({'error': str(e)}), 500
 
+
 from datetime import datetime, timedelta
 
-@users.route('/v1/users/reset_password', methods=['GET'])
-def request_reset_password():
-    email = request.args.get('email')
-    phone = request.args.get('phone')
+# @users.route('/v1/users/reset_password', methods=['GET'])
+# def request_reset_password():
+#     email = request.args.get('email')
+#     phone = request.args.get('phone')
 
-    user = None
-    if phone:
-        user = UserModel.query.filter_by(phone=phone).first()
-    elif email:
-        user = UserModel.query.filter_by(email=email).first()
+#     user = None
+#     if phone:
+#         user = UserModel.query.filter_by(phone=phone).first()
+#     elif email:
+#         user = UserModel.query.filter_by(email=email).first()
 
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
+#     if not user:
+#         return jsonify({'error': 'User not found'}), 404
 
-    if email and not user.email:
-        user.email = email
-        db.session.commit()
+#     if email and not user.email:
+#         user.email = email
+#         db.session.commit()
 
-    existing_token = ResetTokenModel.query.filter_by(user_id=user.user_id).first()
+#     existing_token = ResetTokenModel.query.filter_by(user_id=user.user_id).first()
 
-    if existing_token:
-        if existing_token.valid_till > datetime.utcnow():
-            send_reset_email(user.email, existing_token.token)
-            return jsonify({'message': 'Password reset link sent successfully'}), 200
-        else:
-            db.session.delete(existing_token)
+#     if existing_token:
+#         if existing_token.valid_till > datetime.utcnow():
+#             send_reset_email(user.email, existing_token.token)
+#             return jsonify({'message': 'Password reset link sent successfully'}), 200
+#         else:
+#             db.session.delete(existing_token)
 
-    token = hashlib.sha256(user.user_id.encode()).hexdigest()
-    valid_till = datetime.utcnow() + timedelta(hours=1)  # Example: Token valid for 1 hour
+#     token = hashlib.sha256(user.user_id.encode()).hexdigest()
+#     valid_till = datetime.utcnow() + timedelta(hours=1)  # Example: Token valid for 1 hour
 
-    reset_token = ResetTokenModel(user_id=user.user_id, email=user.email, token=token, valid_till=valid_till)
-    db.session.add(reset_token)
-    db.session.commit()
+#     reset_token = ResetTokenModel(user_id=user.user_id, email=user.email, token=token, valid_till=valid_till)
+#     db.session.add(reset_token)
+#     db.session.commit()
 
-    send_reset_email(user.email, token)
+#     send_reset_email(user.email, token)
 
-    return jsonify({'message': 'Reset password link sent successfully'}), 200
+#     return jsonify({'message': 'Reset password link sent successfully'}), 200
 
 
 
@@ -262,19 +270,14 @@ def request_reset_password():
 @users.route('/v1/users/<string:user_id>', methods=['GET'])
 def get_user(user_id):
     try:
-        user = UserModel.query.filter_by(user_id=user_id).first()
+        user = get_user_status(user_id)
         
         if user:
-            status = user.user_status
-            amount = user.amount_paid
-            paid_status = user.paid_status
+            # status = user.user_status
+            # amount = user.amount_paid
+            # paid_status = user.paid_status
             
-            return jsonify({
-                'user_id': user.user_id,
-                'status': status,
-                'amount': amount,
-                'paid_status': paid_status
-            }), 200
+            return user, 200
         else:
             return jsonify({'error': 'User not found'}), 404
         

@@ -34,3 +34,4 @@ werkzeug==3.0.2
 zipp==3.18.1
 # pymysql
 psycopg2
+sqlalchemy_serializer    
